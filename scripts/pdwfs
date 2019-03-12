@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Copyright 2019 CEA
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# 	http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+usage="Usage: $(basename "$0") [-hvdt] [-c config] [-p path] -- [command] 
+
+Wrap the execution of [command] to run under a pdwfs emulated file system
+
+where:
+    -h          show this help
+    -v          verbose mode
+    -p path     path intercepted by pdwfs (superseded if a configuration file is given)         
+    -c config   load a pdwfs configuration file
+    -d          dump a default pdwfs configuration file
+    -t          show traces of intercepted calls
+    command     a user-defined shell command (must be separated by -- from pdwfs options)"
+
+while getopts ':hvp:c:dt' opt; do
+    case "$opt" in
+    h)  echo "$usage"
+        exit
+        ;;
+    v)  export PDWFS_LOGS=1
+        ;;
+    p)  export PDWFS_MOUNTPATH=$OPTARG
+        ;;
+    c)  export PDWFS_CONF=$OPTARG
+        ;;
+    d)  export PDWFS_DUMPCONF=1
+        ;;
+    t)  export PDWFS_CTRACES=1
+        ;;
+    :)  printf "Error: missing argument for -%s\n" "$OPTARG"
+        echo "$usage"
+        exit 1
+        ;;
+    \?) printf "Error: illegal option: -%s\n" "$OPTARG"
+        echo "$usage"
+        exit 1
+        ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+if [[ -z "$PDWFS_MOUNTPATH" && -z "$PDWFS_CONF" ]]; then
+    echo "Error: no mount path specified. Please provide one through the -p option or a configuration file."
+    echo "$usage"
+    exit 1
+fi
+
+if [ -z "$*" ]; then
+    echo "Error: missing user command"
+    echo "$usage"
+    exit 1
+fi
+
+# get the parent directory path (only works if the present script is called directly, not from a symlink)
+parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+
+PRELOAD_LIB=$parent_path/../lib/pdwfs.so
+
+if [ ! -f $PRELOAD_LIB ]; then
+    echo "$PRELOAD_LIB not found!"
+    exit 1
+fi
+
+export LD_PRELOAD=$PRELOAD_LIB
+
+#execute user command
+$*

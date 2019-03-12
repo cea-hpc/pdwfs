@@ -1,0 +1,18 @@
+language: go
+sudo: false
+
+services:
+  - redis-server
+
+matrix:
+  include:
+    - go: 1.11.x
+    - go: tip
+  allow_failures:
+    - go: tip
+
+env:
+  - GO111MODULE=on
+
+script:
+  - make test
