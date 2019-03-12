@@ -24,3 +24,7 @@ pdwfs is a work in progress and still fairly experimental.
 
 pdwfs is distributed under the Apache License (Version 2.0).
 
+## Acknowledgements
+
+This work was conducted in collaboration with [CINES](http://www.cines.fr).
+
