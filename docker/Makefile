@@ -10,8 +10,7 @@ run: build
 
 clean:
 	docker rm $(shell docker ps -qa --no-trunc --filter "status=exited"); \
-	docker rmi $(shell docker images --filter "dangling=true" -q --no-trunc); \
-	docker rmi $(shell docker images | grep "none" | awk '/ / { print $3 }')
+	docker rmi $(shell docker images --filter "dangling=true" -q --no-trunc)
 
 
 
