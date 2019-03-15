@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis"
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/go-redis/redis"
 )
 
 //InodeRegister ...
@@ -65,6 +65,11 @@ func NewInodeRegister(redisConf *config.Redis, mountConf *config.Mount) *InodeRe
 		root:      root,
 		cwd:       root,
 	}
+}
+
+//Finalize ...
+func (ir *InodeRegister) Finalize() error {
+	return ir.client.Close()
 }
 
 func createInode(mountConf *config.Mount, client IRedisClient, name string, dir bool, mode os.FileMode, parent *Inode, root bool) *Inode {

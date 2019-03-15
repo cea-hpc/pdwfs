@@ -80,7 +80,7 @@ func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
 
 // Finalize performs close up actions on the virtual file system
 func (fs *RedisFS) Finalize() error {
-	return nil
+	return fs.inodes.Finalize()
 }
 
 // ValidatePath ensures path belongs to a filesystem tree catched by pdwfs

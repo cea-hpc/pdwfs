@@ -167,7 +167,8 @@ func (fs *PdwFS) finalize() {
 		}
 	}
 	// clean up all temp files created
-	for _, fileTuple := range fs.fdFileMap {
+	for fd, fileTuple := range fs.fdFileMap {
+		fs.closeFd(fd)
 		err := os.Remove(fileTuple.tempFileName)
 		if err != nil {
 			panic(err)
