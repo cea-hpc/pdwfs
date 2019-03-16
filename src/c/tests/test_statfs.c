@@ -30,9 +30,10 @@ void test_statfs() {
     int err = statfs(TESTFILE, &fsstats);
     CHECK_ERROR(err, "statfs")
     
-    //assert(fsstats.f_type == 0xEF53); // ext2 filesystem hex value, see statfs man page.
-    assert(fsstats.f_type == 0x0BD00BD0); // Lustre filesystem hex value, see Lustre lustre_user.h
-
+    if (getenv("PDWFS")) {
+        // if running on pdwfs, we check it "fakes" a Lustre filesystem (see lustre_user.h)
+        assert(fsstats.f_type == 0x0BD00BD0);
+    }
     close(fd);
     unlink(TESTFILE);
 }

@@ -208,9 +208,6 @@ func (f *MemFile) Seek(off int64, whence int) (int64, error) {
 	if abs < 0 {
 		return 0, errors.New("Seek: negative position")
 	}
-	if abs > f.Size() {
-		return 0, errors.New("Seek: too far")
-	}
 	f.offset = abs
 	return abs, nil
 }

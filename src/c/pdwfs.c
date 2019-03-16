@@ -132,6 +132,7 @@ static ssize_t (*real_getline)(char **lineptr, size_t *n, FILE *stream) = NULL;
 static DIR* (*real_opendir)(const char* path) = NULL;
 
 static int (*real_feof)(FILE *stream) = NULL;
+static int (*real_ferror)(FILE *stream) = NULL;
 
 static int g_do_trace = -1;
 
@@ -1344,5 +1345,14 @@ int feof(FILE *stream) {
         return 1;
     lseek(fd, cur_off, SEEK_SET);
     return 0;
+}
 
+int ferror(FILE *stream) {
+    TRACE("intercepting ferror(stream=%p)\n", stream)
+    
+    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
+        TRACE("calling libc ferror\n");
+        CALL_REAL_OP("ferror", real_ferror, stream)
+    }
+    NOT_IMPLEMENTED("ferror")
 }

@@ -77,6 +77,9 @@ if [ ! -f $PRELOAD_LIB ]; then
     exit 1
 fi
 
+# signal execution of pdwfs (mainly for tests)
+export PDWFS=1
+
 export LD_PRELOAD=$PRELOAD_LIB
 
 #execute user command
