@@ -233,7 +233,11 @@ int open(const char *pathname, int flags, ...) {
         CALL_REAL_OP("open", real_open, pathname, flags, mode)
     }
 
-    return Open(filename, flags, mode);
+    int ret = Open(filename, flags, mode);
+    if (ret < 0) {
+        errno = GetErrno();
+    }
+    return ret;
 }
 
 int close(int fd) {
@@ -286,7 +290,11 @@ int open64(const char *pathname, int flags, ...) {
         TRACE("calling libc open64\n");
         CALL_REAL_OP("open64", real_open64, pathname, flags, mode)
     }
-    return Open(filename, flags, mode);
+    int ret = Open(filename, flags, mode);
+    if (ret < 0) {
+        errno = GetErrno();
+    }
+    return ret;
 }
 
 int creat(const char *pathname, mode_t mode) {
@@ -597,7 +605,11 @@ int unlink(const char *pathname) {
         TRACE("calling libc unlink\n");
         CALL_REAL_OP("unlink", real_unlink, pathname)
     }
-    return Unlink(filename);
+    int ret = Unlink(filename);
+    if (ret < 0) {
+        errno = GetErrno();
+    }
+    return ret;
 }
 
 

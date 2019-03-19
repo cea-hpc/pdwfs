@@ -21,6 +21,15 @@ import (
 	"sync"
 )
 
+var (
+	// ErrNegativeOffset is returned if the offset is negative.
+	ErrNegativeOffset = errors.New("Negative offset")
+	// ErrInvalidSeekWhence is returned if the whence argument of a seek is not a proper value.
+	ErrInvalidSeekWhence = errors.New("Seek whence is not a proper value")
+	// ErrNegativeSeekLocation is returned if the seek location is negative.
+	ErrNegativeSeekLocation = errors.New("Seek location (from offset and whence) is negative")
+)
+
 // MemFile represents a file backed by a Store which is secured from concurrent access.
 type MemFile struct {
 	buf    Buffer
@@ -68,7 +77,7 @@ func (f MemFile) Close() error {
 
 func (f MemFile) readAt(dst []byte, off int64) (int, error) {
 	if off < 0 {
-		return 0, errors.New("readVecAt: negative offset")
+		return 0, ErrNegativeOffset
 	}
 
 	read, err := f.buf.ReadAt(dst, off)
@@ -102,7 +111,7 @@ func (f MemFile) ReadAt(dst []byte, off int64) (int, error) {
 
 func (f MemFile) readVecAt(dstv [][]byte, off int64) (int, error) {
 	if off < 0 {
-		return 0, errors.New("readVecAt: negative offset")
+		return 0, ErrNegativeOffset
 	}
 
 	var size int
@@ -140,7 +149,7 @@ func (f MemFile) ReadVecAt(dstv [][]byte, off int64) (int, error) {
 
 func (f MemFile) writeAt(data []byte, off int64) (int, error) {
 	if off < 0 {
-		return 0, errors.New("writeAt: negative offset")
+		return 0, ErrNegativeOffset
 	}
 	return f.buf.WriteAt(data, off)
 }
@@ -163,7 +172,7 @@ func (f MemFile) WriteAt(data []byte, off int64) (int, error) {
 
 func (f MemFile) writeVecAt(datav [][]byte, off int64) (int, error) {
 	if off < 0 {
-		return 0, errors.New("writeVecAt: negative offset")
+		return 0, ErrNegativeOffset
 	}
 	return f.buf.WriteVecAt(datav, off)
 }
@@ -203,10 +212,10 @@ func (f *MemFile) Seek(off int64, whence int) (int64, error) {
 	case os.SEEK_END: // Relative to the end
 		abs = f.Size() + off
 	default:
-		return 0, errors.New("Seek: invalid whence")
+		return 0, ErrInvalidSeekWhence
 	}
 	if abs < 0 {
-		return 0, errors.New("Seek: negative position")
+		return 0, ErrNegativeSeekLocation
 	}
 	f.offset = abs
 	return abs, nil
