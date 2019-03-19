@@ -533,9 +533,9 @@ func Access(filename string, mode int) int {
 	check(err)
 
 	//FIXME: we only check existence (F_OK), add check versus other modes (R_OK, W_OK, X_OK)
-	if mode != C.F_OK {
-		panic(fmt.Sprintf("Access mode %s not implemented", err))
-	}
+	//if mode != C.F_OK {
+	//	panic(fmt.Sprintf("Access mode %s not implemented", mode))
+	//}
 
 	_, err = mount.Stat(filename)
 	if err != nil {
