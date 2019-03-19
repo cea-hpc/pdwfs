@@ -22,6 +22,7 @@ package main
 #include <sys/stat.h>
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
+#include <errno.h>
 */
 import "C"
 
@@ -30,7 +31,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,8 +49,10 @@ var (
 	errInvalidFd        = errors.New("Invalid file descriptor")
 )
 
-func logError(data ...interface{}) {
-	log.Println("\033[31mERROR", fmt.Sprint(data...), "\033[39m")
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
 
 type fileTuple struct {
@@ -70,12 +72,6 @@ type PdwFS struct {
 
 //NewPdwFS returns a pdwfs virtual filesystem
 func NewPdwFS(conf *config.Pdwfs) *PdwFS {
-	defer func() {
-		if err := recover(); err != nil {
-			logError(err)
-			os.Exit(1)
-		}
-	}()
 	if len(conf.Mounts) == 0 {
 		panic("No mount path specified...")
 	}
@@ -115,9 +111,7 @@ func (fs *PdwFS) registerFile(redisFile *redisfs.File) (*C.FILE, error) {
 	// so if a user set a mount point in the same temp folder used by TempFile, we're not
 	// entering in a recursive loop (intercepting a file in temp, creating a twin temp file, etc)
 	tempFile, err := ioutil.TempFile("", "pdwfs")
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	tempFileName := tempFile.Name()
 	tempFile.Close()
 	path := C.CString(tempFileName)
@@ -125,9 +119,7 @@ func (fs *PdwFS) registerFile(redisFile *redisfs.File) (*C.FILE, error) {
 	cFile, err := C.fopen(path, mode)
 	C.free(unsafe.Pointer(path))
 	C.free(unsafe.Pointer(mode))
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	fd := int(C.fileno(cFile))
 	fs.fdFileMap[fd] = &fileTuple{tempFileName, cFile, redisFile}
 	return cFile, nil
@@ -162,16 +154,13 @@ func (fs *PdwFS) isFdManaged(fd int) bool {
 func (fs *PdwFS) finalize() {
 	for _, mount := range fs.mounts {
 		err := mount.Finalize()
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 	}
 	// clean up all temp files created
-	for _, fileTuple := range fs.fdFileMap {
+	for fd, fileTuple := range fs.fdFileMap {
+		fs.closeFd(fd)
 		err := os.Remove(fileTuple.tempFileName)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 	}
 }
 
@@ -184,10 +173,8 @@ var pdwfs *PdwFS
 func InitPdwfs() {
 	conf := config.New()
 	if dump := os.Getenv("PDWFS_DUMPCONF"); dump != "" {
-		if err := conf.Dump(); err != nil {
-			logError(err)
-			os.Exit(1)
-		}
+		err := conf.Dump()
+		check(err)
 	}
 	pdwfs = NewPdwFS(conf)
 }
@@ -202,9 +189,7 @@ func FinalizePdwfs() {
 //export IsFileManaged
 func IsFileManaged(filename string) int {
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	if mount != nil {
 		return 1
 	}
@@ -220,26 +205,42 @@ func IsFdManaged(fd int) int {
 	return 0
 }
 
+var errno C.int
+
+//GetErrno is used by C functions to retrieve the error number set by Go function
+//export GetErrno
+func GetErrno() C.int {
+	return errno
+}
+
+// setErrno is used by Go functions to set errno
+func setErrno(err C.int) {
+	errno = err
+}
+
 //Open implements open libc call
 //export Open
 func Open(filename string, flags int, mode int) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	file, err := mount.OpenFile(filename, flags, os.FileMode(mode))
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else if os.IsExist(err) {
+			setErrno(C.EEXIST)
+		} else if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrIsDirectory {
+			setErrno(C.EISDIR)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Open: %s", err, err))
+		}
 		return -1
 	}
 	cFile, err := pdwfs.registerFile(&file)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
 	return int(C.fileno(cFile))
 }
 
@@ -249,10 +250,8 @@ func Fopen(filename string, mode string) *C.FILE {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		logError(err)
-		return (*C.FILE)(C.NULL)
-	}
+	check(err)
+
 	var flags int
 	switch mode {
 	case "r":
@@ -264,14 +263,19 @@ func Fopen(filename string, mode string) *C.FILE {
 	}
 	file, err := mount.OpenFile(filename, flags, os.FileMode(0600))
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else if os.IsExist(err) {
+			setErrno(C.EEXIST)
+		} else if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrIsDirectory {
+			setErrno(C.EISDIR)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Fopen: %s", err, err))
+		}
 		return (*C.FILE)(C.NULL)
 	}
 	cFile, err := pdwfs.registerFile(&file)
-	if err != nil {
-		logError(err)
-		return (*C.FILE)(C.NULL)
-	}
+	check(err)
 	return cFile
 }
 
@@ -281,20 +285,13 @@ func Close(fd int) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	err = (*file).Close()
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err) // no known conversion to errno, just panic if err != nil
+
 	err = pdwfs.closeFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
 	return 0
 }
 
@@ -304,15 +301,10 @@ func Write(fd int, buf []byte) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).Write(buf)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err) // no known conversion to errno, just panic if err != nil
 	return n
 }
 
@@ -322,13 +314,16 @@ func Pwrite(fd int, buf []byte, off int64) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).WriteAt(buf, off)
 	if err != nil {
-		logError(err)
+		if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrNegativeOffset {
+			setErrno(C.EINVAL)
+			C.perror(C.CString(e.Err.Error()))
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Pwrite: %s", err, err))
+		}
 		return -1
 	}
 	return n
@@ -340,15 +335,10 @@ func Writev(fd int, iov [][]byte) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).WriteVec(iov)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err) // no known conversion to errno, just panic if err != nil
 	return n
 }
 
@@ -358,13 +348,16 @@ func Pwritev(fd int, iov [][]byte, off int64) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).WriteVecAt(iov, off)
 	if err != nil {
-		logError(err)
+		if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrNegativeOffset {
+			setErrno(C.EINVAL)
+			C.perror(C.CString(err.Error()))
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Pwritev: %s", err, err))
+		}
 		return -1
 	}
 	return n
@@ -376,14 +369,11 @@ func Read(fd int, buf []byte) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).Read(buf)
 	if err != nil && err != io.EOF {
-		logError(err)
-		return -1
+		panic(err)
 	}
 	return n
 }
@@ -394,13 +384,16 @@ func Pread(fd int, buf []byte, off int64) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).ReadAt(buf, off)
 	if err != nil && err != io.EOF {
-		logError(err)
+		if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrNegativeOffset {
+			setErrno(C.EINVAL)
+			C.perror(C.CString(err.Error()))
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Pread: %s", err, err))
+		}
 		return -1
 	}
 	return n
@@ -412,14 +405,11 @@ func Readv(fd int, iov [][]byte) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).ReadVec(iov)
 	if err != nil && err != io.EOF {
-		logError(err)
-		return -1
+		panic(err)
 	}
 	return n
 }
@@ -430,13 +420,16 @@ func Preadv(fd int, iov [][]byte, off int64) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).ReadVecAt(iov, off)
 	if err != nil && err != io.EOF {
-		logError(err)
+		if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrNegativeOffset {
+			setErrno(C.EINVAL)
+			C.perror(C.CString(err.Error()))
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Preadv: %s", err, err))
+		}
 		return -1
 	}
 	return n
@@ -448,13 +441,20 @@ func Lseek(fd int, offset int64, whence int) int64 {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	n, err := (*file).Seek(offset, whence)
 	if err != nil {
-		logError(err)
+		e, ok := err.(*os.PathError)
+		if !ok {
+			panic(fmt.Sprintf("unhandled %T in Lseek: %s", err, err))
+		}
+		if e.Err == redisfs.ErrNegativeSeekLocation || e.Err == redisfs.ErrInvalidSeekWhence {
+			setErrno(C.EINVAL)
+			C.perror(C.CString(err.Error()))
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Lseek: %s", err, err))
+		}
 		return -1
 	}
 	return n
@@ -466,13 +466,15 @@ func Unlink(filename string) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	err = mount.Remove(filename)
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Unlink: %s", err, err))
+		}
 		return -1
 	}
 	return 0
@@ -484,13 +486,17 @@ func Mkdir(dirname string, mode int) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(dirname)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	err = mount.Mkdir(dirname, os.FileMode(mode))
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else if os.IsExist(err) {
+			setErrno(C.EEXIST)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Mkdir: %s", err, err))
+		}
 		return -1
 	}
 	return 0
@@ -502,13 +508,17 @@ func Rmdir(dirname string) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(dirname)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	err = mount.RmDir(dirname)
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrDirNotEmpty {
+			setErrno(C.ENOTEMPTY)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Rmdir: %s", err, err))
+		}
 		return -1
 	}
 	return 0
@@ -520,17 +530,22 @@ func Access(filename string, mode int) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
+	//FIXME: we only check existence (F_OK), add check versus other modes (R_OK, W_OK, X_OK)
+	//if mode != C.F_OK {
+	//	panic(fmt.Sprintf("Access mode %s not implemented", mode))
+	//}
+
 	_, err = mount.Stat(filename)
 	if err != nil {
-		//FIXME: don't log any error if mode is F_OK and error returned is ErrNotExist, this is normal behaviour
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in Access: %s", err, err))
+		}
 		return -1
 	}
-	//FIXME: check versus the mode (R_OK, W_OK, X_OK)
 	return 0
 }
 
@@ -540,27 +555,24 @@ func Ftruncate(fd int, length int64) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	err = (*file).Truncate(length)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err) // no known conversion to errno, just panic if err != nil
 	return 0
 }
 
 func stat(filename string, stats *C.struct_stat) int {
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	inode, err := mount.Stat(filename)
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in stat: %s", err, err))
+		}
 		return -1
 	}
 	// Only implements value required by test applications
@@ -583,13 +595,15 @@ func Stat(filename string, stats *C.struct_stat) int {
 
 func stat64(filename string, stats *C.struct_stat64) int {
 	mount, err := pdwfs.getMount(filename)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
+
 	inode, err := mount.Stat(filename)
 	if err != nil {
-		logError(err)
+		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else {
+			panic(fmt.Sprintf("unhandled %T in stat: %s", err, err))
+		}
 		return -1
 	}
 	// Only implements value required by test applications
@@ -616,10 +630,7 @@ func Fstat(fd int, stats *C.struct_stat) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
 	return stat((*file).Name(), stats)
 }
 
@@ -629,10 +640,7 @@ func Fstat64(fd int, stats *C.struct_stat64) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	file, err := pdwfs.getFileFromFd(fd)
-	if err != nil {
-		logError(err)
-		return -1
-	}
+	check(err)
 	return stat64((*file).Name(), stats)
 }
 

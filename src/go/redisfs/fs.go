@@ -16,7 +16,6 @@ package redisfs
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -80,7 +79,7 @@ func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
 
 // Finalize performs close up actions on the virtual file system
 func (fs *RedisFS) Finalize() error {
-	return nil
+	return fs.inodes.Finalize()
 }
 
 // ValidatePath ensures path belongs to a filesystem tree catched by pdwfs
@@ -107,7 +106,7 @@ func (fs *RedisFS) Mkdir(name string, perm os.FileMode) error {
 		return &os.PathError{Op: "mkdir", Path: name, Err: err}
 	}
 	if fi != nil {
-		return &os.PathError{Op: "mkdir", Path: name, Err: fmt.Errorf("Directory %q already exists", name)}
+		return &os.PathError{Op: "mkdir", Path: name, Err: os.ErrExist}
 	}
 	fs.inodes.CreateInode(base, true, perm, parent)
 	return nil

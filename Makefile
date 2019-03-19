@@ -17,7 +17,8 @@ pdwfsgo:
 .PHONY: scripts
 scripts: scripts/pdwfs 
 	mkdir -p $(BUILDDIR)/bin
-	install scripts/pdwfs $(BUILDDIR)/bin/	 
+	install scripts/pdwfs $(BUILDDIR)/bin/
+	install scripts/pdwfs-redis $(BUILDDIR)/bin/	 
 
 test: scripts pdwfslibc
 	make -C src/go test
@@ -32,6 +33,7 @@ install: pdwfslibc
 	install $(BUILDDIR)/lib/libpdwfs_go.so $(PREFIX)/lib
 	install $(BUILDDIR)/lib/pdwfs.so $(PREFIX)/lib
 	install scripts/pdwfs $(PREFIX)/bin
+	install scripts/pdwfs-redis $(PREFIX)/bin
 	chmod +x $(PREFIX)/bin/*
 
 tag:

@@ -148,9 +148,9 @@ func TestSeek(t *testing.T) {
 		t.Errorf("Unexpected error: %s", err)
 	}
 
-	// seel past the end
-	if _, err := f.Seek(1, os.SEEK_END); err == nil {
-		t.Errorf("Expected invalid position error")
+	// seek past the end
+	if _, err := f.Seek(1, os.SEEK_END); err != nil {
+		t.Errorf("Can't seek past end")
 	}
 }
 

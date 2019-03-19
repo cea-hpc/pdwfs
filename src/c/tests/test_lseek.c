@@ -17,11 +17,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
+#include <strings.h>
 #include "tests.h"
 
 void test_lseek() {
 
-    int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
+    int fd = open(TESTFILE, O_CREAT|O_RDWR|O_TRUNC, 0777);
     CHECK_ERROR(fd, "open")
  
     int n = write(fd, "Hello World !\n", 14);
@@ -31,7 +32,14 @@ void test_lseek() {
     assert(n==14);
     lseek(fd, 0, SEEK_SET);
 
-    n = write(fd, "Hello Go !\n", 14);
+    n = write(fd, "Hello Golang !\n", 15);
+    CHECK_ERROR(n, "write")
+
+    // seek past end of file
+    n = lseek(fd, 5, SEEK_CUR);
+    assert(n == 20);
+
+    n =  write(fd, "Go\n", 3);
     CHECK_ERROR(n, "write")
 
     close(fd);
@@ -39,11 +47,11 @@ void test_lseek() {
     fd = open(TESTFILE, O_RDONLY, 0777);
     CHECK_ERROR(fd, "open")
 
-    char buf[14];
-    n = read(fd, &buf, 14);
+    char buf[23];
+    n = read(fd, &buf, 23);
     CHECK_ERROR(n, "read")
 
-    assert(strncmp(buf, "Hello Go !\n", 14) == 0);
+    assert(bcmp(buf, "Hello Golang !\n\0\0\0\0\0Go\n", 23) == 0);
 
     close(fd);
     unlink(TESTFILE);

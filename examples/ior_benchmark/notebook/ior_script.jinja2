@@ -1,0 +1,16 @@
+IOR START
+  api={{ api }}
+  verbose=0
+  testFile=testFile
+  writeFile=1
+  readFile=0
+{% for case in cases %}
+RUN
+  numTasks={{ case.numTasks }}
+  filePerProc={{ case.filePerProc }}
+  collective={{ case.collective }}
+  segmentCount={{ case.segmentCount }}
+  blockSize={{ case.transferSize }}
+  transferSize={{ case.transferSize }}
+{% endfor %}
+IOR STOP

@@ -1,7 +1,9 @@
 BUILDDIR=../../build
 SCRIPTSDIR=../../scripts
 
-$(BUILDDIR)/lib/libpdwfs_go.so:
+GO_FILES = $(wildcard config/*.go) $(wildcard redisfs/*.go) 
+
+$(BUILDDIR)/lib/libpdwfs_go.so: $(GO_FILES)
 	go build -mod=vendor -o $@ -buildmode=c-shared
 	mkdir -p $(BUILDDIR)/include && mv $(BUILDDIR)/lib/libpdwfs_go.h $(BUILDDIR)/include
 
@@ -10,5 +12,5 @@ clean:
 	rm -f $(BUILDDIR)/include/libpdwfs_go.h
 
 test:
-	go vet ./...
-	go test ./...
+	go vet -mod=vendor ./...
+	go test -mod=vendor ./...

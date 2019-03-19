@@ -36,8 +36,7 @@ void test_feof() {
     assert(ret == 0); // EOF is not reached
 
     char buf[1024];
-    char* s = fgets(buf, 1024, f);
-    assert(s == buf);
+    while (fgets(buf, 1024, f) != NULL) {}
     assert(strlen(buf) == 14);
     assert(strncmp(buf, "Hello World !\n", 14) == 0);
 

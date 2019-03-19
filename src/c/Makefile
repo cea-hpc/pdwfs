@@ -28,10 +28,13 @@ clean:
 	rm -f $(BUILDDIR)/lib/pdwfs.so
 	rm -rf $(BUILDDIR)/tests
 
-test-runs := $(addsuffix .test-run,$(C_TESTS))
+test-runs := $(addsuffix .test-disk,$(C_TESTS)) $(addsuffix .test-pdwfs,$(C_TESTS))
 
 test: all $(test-runs)
 
-%.test-run: $(BUILDDIR)/lib/pdwfs.so
-	$(BUILDDIR)/bin/pdwfs -p . -- $(subst .test-run,,$@)
+%.test-disk:  # execute tests on disk
+	$(subst .test-disk,,$@)
+
+%.test-pdwfs: $(BUILDDIR)/lib/pdwfs.so  # execute tests through pdwfs
+	$(BUILDDIR)/bin/pdwfs -p . -- $(subst .test-pdwfs,,$@)
 	@redis-cli flushall > /dev/null
