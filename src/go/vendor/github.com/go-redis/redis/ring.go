@@ -365,7 +365,7 @@ func NewRing(opt *RingOptions) *Ring {
 		ring.shards.Add(name, NewClient(clopt))
 	}
 
-	go ring.shards.Heartbeat(opt.HeartbeatFrequency)
+	//go ring.shards.Heartbeat(opt.HeartbeatFrequency)
 
 	return ring
 }
