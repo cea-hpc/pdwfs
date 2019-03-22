@@ -94,21 +94,33 @@ func (fs *RedisFS) ValidatePath(path string) error {
 	return nil
 }
 
+func (fs *RedisFS) fileInfo(abspath string) (parent, node *Inode, err error) {
+	parentPath := filepath.Dir(abspath)
+	fiParent, _ := fs.inodes.getInode(parentPath)
+	if fiParent == nil || !fiParent.IsDir() {
+		return nil, nil, os.ErrNotExist
+	}
+	fiNode, _ := fs.inodes.getInode(abspath)
+	return fiParent, fiNode, nil
+}
+
 // Mkdir creates a new directory with given permissions
 func (fs *RedisFS) Mkdir(name string, perm os.FileMode) error {
 	if err := fs.ValidatePath(name); err != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: err}
 	}
-	name = filepath.Clean(name)
-	base := filepath.Base(name)
-	parent, fi, err := fs.inodes.FileInfo(name)
+	path, err := filepath.Abs(name)
+	if err != nil {
+		panic(err)
+	}
+	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: err}
 	}
-	if fi != nil {
+	if fiNode != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: os.ErrExist}
 	}
-	fs.inodes.CreateInode(base, true, perm, parent)
+	fs.inodes.CreateInode(path, true, perm, fiParent)
 	return nil
 }
 
@@ -129,8 +141,11 @@ func (fs *RedisFS) ReadDir(path string) ([]os.FileInfo, error) {
 	if err := fs.ValidatePath(path); err != nil {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: err}
 	}
-	path = filepath.Clean(path)
-	_, fi, err := fs.inodes.FileInfo(path)
+	path, err := filepath.Abs(path)
+	if err != nil {
+		panic(err)
+	}
+	_, fi, err := fs.fileInfo(path)
 	if err != nil {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: err}
 	}
@@ -177,9 +192,11 @@ func (fs *RedisFS) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 	if err := fs.ValidatePath(name); err != nil {
 		return nil, &os.PathError{Op: "open", Path: name, Err: err}
 	}
-	name = filepath.Clean(name)
-	base := filepath.Base(name)
-	fiParent, fiNode, err := fs.inodes.FileInfo(name)
+	path, err := filepath.Abs(name)
+	if err != nil {
+		panic(err)
+	}
+	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return nil, &os.PathError{Op: "open", Path: name, Err: err}
 	}
@@ -188,7 +205,7 @@ func (fs *RedisFS) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 		if !hasFlag(os.O_CREATE, flag) {
 			return nil, &os.PathError{Op: "open", Path: name, Err: os.ErrNotExist}
 		}
-		fiNode = fs.inodes.CreateInode(base, false, perm, fiParent)
+		fiNode = fs.inodes.CreateInode(path, false, perm, fiParent)
 	} else { // file exists
 		if hasFlag(os.O_CREATE|os.O_EXCL, flag) {
 			return nil, &os.PathError{Op: "open", Path: name, Err: os.ErrExist}
@@ -196,10 +213,6 @@ func (fs *RedisFS) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 		if fiNode.IsDir() {
 			return nil, &os.PathError{Op: "open", Path: name, Err: ErrIsDirectory}
 		}
-	}
-
-	if !hasFlag(os.O_RDONLY, flag) {
-		fiNode.touch()
 	}
 	return fs.inodes.getFile(fiNode, flag)
 }
@@ -230,8 +243,11 @@ func (fs *RedisFS) Remove(name string) error {
 	if err := fs.ValidatePath(name); err != nil {
 		return &os.PathError{Op: "remove", Path: name, Err: err}
 	}
-	name = filepath.Clean(name)
-	fiParent, fiNode, err := fs.inodes.FileInfo(name)
+	path, err := filepath.Abs(name)
+	if err != nil {
+		panic(err)
+	}
+	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return &os.PathError{Op: "remove", Path: name, Err: err}
 	}
@@ -243,51 +259,17 @@ func (fs *RedisFS) Remove(name string) error {
 	return nil
 }
 
-// Rename renames (moves) a file.
-// Handles to the oldpath persist but might return oldpath if Name() is called.
-func (fs *RedisFS) Rename(oldpath, newpath string) error {
-	if err := fs.ValidatePath(oldpath); err != nil {
-		return &os.PathError{Op: "rename", Path: oldpath, Err: err}
-	}
-	oldpath = filepath.Clean(oldpath)
-	fiOldParent, fiOld, err := fs.inodes.FileInfo(oldpath)
-	if err != nil {
-		return &os.PathError{Op: "rename", Path: oldpath, Err: err}
-	}
-	if fiOld == nil {
-		return &os.PathError{Op: "rename", Path: oldpath, Err: os.ErrNotExist}
-	}
-
-	if err := fs.ValidatePath(newpath); err != nil {
-		return &os.PathError{Op: "rename", Path: newpath, Err: err}
-	}
-	newpath = filepath.Clean(newpath)
-	fiNewParent, fiNew, err := fs.inodes.FileInfo(newpath)
-	if err != nil {
-		return &os.PathError{Op: "rename", Path: newpath, Err: err}
-	}
-
-	if fiNew != nil {
-		return &os.PathError{Op: "rename", Path: newpath, Err: os.ErrExist}
-	}
-
-	newBase := filepath.Base(newpath)
-
-	// Relink
-	fiOldParent.removeChild(fiOld)
-	fiOld.relink(fiNewParent, newBase)
-	fiNewParent.setChild(fiOld)
-	return nil
-}
-
 // Stat returns the Inode structure describing the named file.
 // If there is an error, it will be of type *PathError.
 func (fs *RedisFS) Stat(name string) (os.FileInfo, error) {
 	if err := fs.ValidatePath(name); err != nil {
 		return nil, &os.PathError{Op: "stat", Path: name, Err: err}
 	}
-	name = filepath.Clean(name)
-	_, fi, err := fs.inodes.FileInfo(name)
+	path, err := filepath.Abs(name)
+	if err != nil {
+		panic(err)
+	}
+	_, fi, err := fs.fileInfo(path)
 	if err != nil {
 		return nil, &os.PathError{Op: "stat", Path: name, Err: err}
 	}

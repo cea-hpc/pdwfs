@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-redis/redis"
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/go-redis/redis"
 )
 
 // IRedisClient interface to allow multiple client implementations (client, ring, cluster)
@@ -34,6 +34,9 @@ type IRedisClient interface {
 	Unlink(...string) *redis.IntCmd
 	SetNX(string, interface{}, time.Duration) *redis.BoolCmd
 	SetBit(key string, offset int64, value int) *redis.IntCmd
+	SAdd(key string, members ...interface{}) *redis.IntCmd
+	SRem(key string, members ...interface{}) *redis.IntCmd
+	SMembers(key string) *redis.StringSliceCmd
 	Eval(script string, keys []string, args ...interface{}) *redis.Cmd
 	EvalSha(sha1 string, keys []string, args ...interface{}) *redis.Cmd
 	ScriptExists(hashes ...string) *redis.BoolSliceCmd
@@ -71,7 +74,13 @@ func NewRedisClient(conf *config.Redis) IRedisClient {
 		for i, addr := range conf.RedisAddrs {
 			addrs[fmt.Sprintf("shard%d", i)] = addr
 		}
-		client = redis.NewRing(&redis.RingOptions{Addrs: addrs})
+		opt := &redis.RingOptions{
+			Addrs:       addrs,
+			PoolTimeout: 1 * time.Hour, // deactivate timeouts
+			ReadTimeout: 1 * time.Hour,
+			IdleTimeout: 1 * time.Hour,
+		}
+		client = redis.NewRing(opt)
 	}
 	return client
 }

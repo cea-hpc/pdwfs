@@ -17,8 +17,8 @@ package redisfs
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestCreate(t *testing.T) {
@@ -64,17 +64,27 @@ func TestCreate(t *testing.T) {
 			t.Errorf("Expected error creating file")
 		}
 	}
+}
 
+func TestCreateRelative(t *testing.T) {
+	client, redisConf := GetRedisClient()
+	defer client.FlushAll()
+
+	mountConf := GetMountPathConf()
+	cwd, err := os.Getwd()
+	Ok(t, err)
+	mountConf.Path = cwd
+
+	fs := NewRedisFS(redisConf, mountConf)
 	// NewRedisFS file with relative path (workingDir == root)
 	{
 		f, err := fs.OpenFile("relFile", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		Ok(t, err)
-		Equals(t, "/relFile", f.Name(), "Wrong name")
+		Equals(t, filepath.Join(cwd, "relFile"), f.Name(), "Wrong name")
 	}
-
 }
 
-func TestMkdirAbsRel(t *testing.T) {
+func TestMkdirAbs(t *testing.T) {
 	client, redisConf := GetRedisClient()
 	defer client.FlushAll()
 
@@ -89,19 +99,30 @@ func TestMkdirAbsRel(t *testing.T) {
 		Ok(t, err)
 	}
 
+	// NewRedisFS dir twice
+	{
+		err := fs.Mkdir("/usr", 0)
+		if err == nil {
+			t.Fatalf("Expecting error creating directory: %s", "/home")
+		}
+	}
+}
+
+func TestMkdirRel(t *testing.T) {
+	client, redisConf := GetRedisClient()
+	defer client.FlushAll()
+
+	mountConf := GetMountPathConf()
+	cwd, err := os.Getwd()
+	Ok(t, err)
+	mountConf.Path = cwd
+
+	fs := NewRedisFS(redisConf, mountConf)
+
 	// NewRedisFS dir with relative path
 	{
 		err := fs.Mkdir("home", 0)
 		Ok(t, err)
-
-	}
-
-	// NewRedisFS dir twice
-	{
-		err := fs.Mkdir("/home", 0)
-		if err == nil {
-			t.Fatalf("Expecting error creating directory: %s", "/home")
-		}
 	}
 }
 
@@ -141,7 +162,7 @@ func TestReadDir(t *testing.T) {
 	fs := NewRedisFS(redisConf, mountConf)
 
 	dirs := []string{"/home", "/home/linus", "/home/rob", "/home/pike", "/home/blang"}
-	expectNames := []string{"README.txt", "blang", "linus", "pike", "rob"}
+	expectNames := []string{"/home/README.txt", "/home/blang", "/home/linus", "/home/pike", "/home/rob"}
 	for _, dir := range dirs {
 		err := fs.Mkdir(dir, 0777)
 		Ok(t, err)
@@ -157,7 +178,7 @@ func TestReadDir(t *testing.T) {
 	Equals(t, len(fis), len(expectNames), "Wrong size")
 
 	for i, n := range expectNames {
-		Equals(t, fis[i].Name(), n, "Wrong name")
+		Equals(t, n, fis[i].Name(), "Wrong name")
 	}
 
 	// Readdir empty directory
@@ -518,11 +539,6 @@ func TestStat(t *testing.T) {
 	fi, err = fs.Stat(f.Name())
 	Ok(t, err)
 
-	// Fileinfo name is base name
-	if name := fi.Name(); name != "readme.txt" {
-		t.Errorf("Invalid fileinfo name: %s", name)
-	}
-
 	// File name is abs name
 	if name := f.Name(); name != "/readme.txt" {
 		t.Errorf("Invalid file name: %s", name)
@@ -553,102 +569,6 @@ func readFile(fs *RedisFS, name string) ([]byte, error) {
 		return nil, err
 	}
 	return ioutil.ReadAll(f)
-}
-
-func TestRename(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
-
-	mountConf := GetMountPathConf()
-	mountConf.Path = "/"
-
-	fs := NewRedisFS(redisConf, mountConf)
-
-	const content = "read me"
-
-	if _, err := writeFile(fs, "/readme.txt", os.O_CREATE|os.O_RDWR, 0666, []byte(content)); err != nil {
-		t.Errorf("Unexpected error writing file: %s", err)
-	}
-
-	if err := fs.Rename("/readme.txt", "/README.txt"); err != nil {
-		t.Errorf("Unexpected error renaming file: %s", err)
-	}
-
-	if _, err := fs.Stat("/readme.txt"); err == nil {
-		t.Errorf("Old file still exists")
-	}
-
-	if _, err := fs.Stat("/README.txt"); err != nil {
-		t.Errorf("Error stat newfile: %s", err)
-	}
-	if b, err := readFile(fs, "/README.txt"); err != nil {
-		t.Errorf("Error reading file: %s", err)
-	} else if s := string(b); s != content {
-		t.Errorf("Invalid content: %s", s)
-	}
-
-	// Rename unknown file
-	if err := fs.Rename("/nonexisting.txt", "/goodtarget.txt"); err == nil {
-		t.Errorf("Expected error renaming file")
-	}
-
-	// Rename unknown file in nonexisting directory
-	if err := fs.Rename("/nonexisting/nonexisting.txt", "/goodtarget.txt"); err == nil {
-		t.Errorf("Expected error renaming file")
-	}
-
-	// Rename existing file to nonexisting directory
-	if err := fs.Rename("/README.txt", "/nonexisting/nonexisting.txt"); err == nil {
-		t.Errorf("Expected error renaming file")
-	}
-
-	if err := fs.Mkdir("/newdirectory", 0777); err != nil {
-		t.Errorf("Error creating directory: %s", err)
-	}
-
-	if err := fs.Rename("/README.txt", "/newdirectory/README.txt"); err != nil {
-		t.Errorf("Error renaming file: %s", err)
-	}
-
-	// NewRedisFS the same file again at root
-	if _, err := writeFile(fs, "/README.txt", os.O_CREATE|os.O_RDWR, 0666, []byte(content)); err != nil {
-		t.Errorf("Unexpected error writing file: %s", err)
-	}
-
-	// Overwrite existing file
-	if err := fs.Rename("/newdirectory/README.txt", "/README.txt"); err == nil {
-		t.Errorf("Expected error renaming file")
-	}
-
-}
-
-func TestModTime(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
-
-	mountConf := GetMountPathConf()
-	mountConf.Path = "/"
-
-	fs := NewRedisFS(redisConf, mountConf)
-
-	tBeforeWrite := time.Now()
-	writeFile(fs, "/readme.txt", os.O_CREATE|os.O_RDWR, 0666, []byte{0, 0, 0})
-	fi, _ := fs.Stat("/readme.txt")
-	mtimeAfterWrite := fi.ModTime()
-
-	if !mtimeAfterWrite.After(tBeforeWrite) {
-		t.Error("Open should modify mtime")
-	}
-
-	f, err := fs.OpenFile("/readme.txt", os.O_RDONLY, 0666)
-	Ok(t, err)
-
-	f.Close()
-	tAfterRead := fi.ModTime()
-
-	if tAfterRead != mtimeAfterWrite {
-		t.Error("Open with O_RDONLY should not modify mtime")
-	}
 }
 
 func TestVolumesConcurrentAccess(t *testing.T) {
