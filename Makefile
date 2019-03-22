@@ -1,7 +1,7 @@
 BUILDDIR=build
 
 #install dir
-PREFIX ?= $(HOME)/opt/pdwfs
+PREFIX ?= /usr/local
 
 all: dirs pdwfslibc scripts
 

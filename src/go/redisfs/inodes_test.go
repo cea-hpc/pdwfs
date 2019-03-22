@@ -15,54 +15,40 @@
 package redisfs
 
 import (
+	"os"
 	"testing"
 )
 
 func TestInodeMeta(t *testing.T) {
 	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	//defer client.FlushAll()
 
 	mountConf := GetMountPathConf()
 
 	i := NewInode(mountConf, client, "id")
 
-	res, err := i.hasMeta()
+	res, err := i.exists()
 	Ok(t, err)
 	Equals(t, false, res, "no metadata expected")
 
-	md := &inodeMeta{
-		Name: "Luke",
-	}
-
-	err = i.initMeta(md)
+	err = i.initMeta(true, 0600)
 	Ok(t, err)
 
-	res, err = i.hasMeta()
+	res, err = i.exists()
 	Ok(t, err)
 	Equals(t, true, res, "metadata expected")
 
-	md2 := &inodeMeta{
-		Name: "Yoda",
-	}
-
-	err = i.initMeta(md2) // should be a no op
+	err = i.initMeta(false, 0777) // should be a no op
 	Ok(t, err)
 
-	val := i.getMeta()
+	d := i.IsDir()
 	Ok(t, err)
-	Equals(t, md, val, "Wrong metadata")
+	Equals(t, d, true, "should be a dir")
 
-	err = i.setMeta(md2)
+	m := i.Mode()
 	Ok(t, err)
-
-	val = i.getMeta()
-	Ok(t, err)
-	Equals(t, md2, val, "Wrong metadata")
+	Equals(t, m, os.FileMode(0600), "should be 0600 mode")
 
 	err = i.delMeta()
 	Ok(t, err)
-
-	val = i.getMeta()
-	var nilMeta *inodeMeta
-	Equals(t, nilMeta, val, "Wrong metadata")
 }

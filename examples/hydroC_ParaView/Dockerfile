@@ -18,32 +18,36 @@ RUN wget -O ffmpeg.tar.xz 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-rele
 	rm ffmpeg.tar.xz
 
 
-# Clone and build Hydro simulation code and pdwfs in user space
+# Switch to non-root user
+# replace UID and GID with yours to access your files through a mounted volume
+RUN groupadd --gid 1010 rebels && \
+    useradd --uid 1010 --gid rebels luke
 
 USER luke
+ENV HOME /home/luke
+WORKDIR ${HOME}
+RUN mkdir -p ${HOME}/run ${HOME}/src
 
-RUN mkdir -p ${HOME}/src && cd ${HOME}/src && \
-	git clone 'https://github.com/JCapul/Hydro' && \
+
+# Clone and build Hydro simulation code and pdwfs in user space
+
+RUN cd src && git clone 'https://github.com/JCapul/Hydro' && \
 	make -C Hydro/HydroC/HydroC99_2DMpi/Src && \
 	install Hydro/HydroC/HydroC99_2DMpi/Src/hydro -D ${HOME}/opt/hydro/bin/hydro
 
 ENV PATH "${HOME}/opt/hydro/bin:$PATH"
 
-RUN cd ${HOME}/src && \
-	git clone 'https://github.com/cea-hpc/pdwfs' && \
+RUN cd src && git clone 'https://github.com/cea-hpc/pdwfs' && \
 	make -C pdwfs PREFIX=${HOME}/opt/pdwfs install
 
-ENV PATH "${HOME}/opt/pdwfs/bin:$PATH"
+ENV PATH "${HOME}/opt/pdwfs/bin:${PATH}"
 
-# uncomment to use pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
-# (a modification is needed in the Makefile as well) 
-#ENV PATH "/pdwfs/build/bin:$PATH"
+# uncomment to build pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
+# (a modification is needed in the Makefile as well)
+#ENV PATH "/pdwfs/build/bin:${PATH}"
 
 COPY banner.sh /tmp/
 RUN cat /tmp/banner.sh >> ${HOME}/.bashrc
-
-RUN mkdir -p ${HOME}/run
-WORKDIR ${HOME}/run
 
 COPY --chown=luke:rebels paraview_run.py .
 COPY --chown=luke:rebels process_all.py .

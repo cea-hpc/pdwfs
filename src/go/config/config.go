@@ -16,10 +16,13 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 //Mount point configuration
@@ -74,6 +77,10 @@ func New() *Pdwfs {
 		RedisConf: &defaultRedis,
 	}
 
+	if addrs := os.Getenv("PDWFS_REDIS"); addrs != "" {
+		conf.RedisConf.RedisAddrs = strings.Split(addrs, ",")
+	}
+
 	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
 		mount := Mount{
 			Path:          path,
@@ -82,6 +89,17 @@ func New() *Pdwfs {
 			ReadParallel:  true,
 		}
 		conf.Mounts[path] = &mount
+	}
+
+	if blockSize := os.Getenv("PDWFS_BLOCKSIZE"); blockSize != "" {
+		for _, mount := range conf.Mounts {
+			size, err := strconv.Atoi(blockSize)
+			if err != nil {
+				log.Fatalln("Can't convert BlockSize in PDWFS_BLOCKSIZE to int")
+			}
+			mount.BlockSize = size * 1024 * 1024
+			fmt.Println("BlockSize: ", mount.BlockSize)
+		}
 	}
 
 	if confFile := os.Getenv("PDWFS_CONF"); confFile != "" {

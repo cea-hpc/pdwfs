@@ -1,6 +1,9 @@
 FROM pdwfs-base
 
-USER root
+RUN yum -y update && yum -y install \
+	python-devel \
+	zlib-devel; \
+	yum clean all
 
 # Download, build HDF5 and IOR, install in /usr/local
 
@@ -16,27 +19,38 @@ RUN git clone 'https://github.com/hpc/ior' && \
 	cd .. && rm -rf ior/
 
 
+# Jupyter, matplotlib and pandas
+RUN wget -O get-pip.py 'https://bootstrap.pypa.io/get-pip.py' && \
+	python get-pip.py && \
+	python -m pip install jupyter matplotlib pandas
+
+EXPOSE 8888
+
+
+# Switch to non-root user
+# replace UID and GID with yours to access your files through a mounted volume
+RUN groupadd --gid 1010 rebels && \
+    useradd --uid 1010 --gid rebels luke
+
 USER luke
+ENV HOME /home/luke
+WORKDIR ${HOME}
+RUN mkdir -p ${HOME}/run
 
-# Clone, build and install pdwfs in user space
+RUN git clone 'https://github.com/cea-hpc/pdwfs' && \
+	cd pdwfs && make PREFIX=${HOME}/opt/pdwfs install
 
-RUN mkdir -p ${HOME}/src && cd ${HOME}/src && \
-	git clone 'https://github.com/cea-hpc/pdwfs' && \
-	cd pdwfs && git checkout develop && \
-	make PREFIX=${HOME}/opt/pdwfs install
+ENV PATH "${HOME}/opt/pdwfs:${PATH}"
 
-ENV PATH "${HOME}/opt/pdwfs/bin:$PATH"
+# uncomment to build pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
+# (a modification is needed in the Makefile as well)
+#ENV PATH "/pdwfs/build/bin:${PATH}"
 
-# uncomment to use pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
-# (a modification is needed in the Makefile as well) 
-ENV PATH "/pdwfs/build/bin:$PATH"
 
 COPY banner.sh /tmp/
 RUN cat /tmp/banner.sh >> ${HOME}/.bashrc
 
-RUN mkdir -p ${HOME}/run
-WORKDIR ${HOME}
-
+COPY --chown=luke:rebels jupyter_notebook_config.py ${HOME}/.jupyter/
 COPY --chown=luke:rebels notebook/ior_example.ipynb .
 COPY --chown=luke:rebels notebook/ior_script.jinja2 .
 

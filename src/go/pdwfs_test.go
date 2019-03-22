@@ -90,9 +90,9 @@ func TestMultiMount(t *testing.T) {
 	Ok(t, err)
 
 	data, err := readFile(pdwfs, "/rebels/luke/quotes")
-	Equals(t, []byte("Vader's on that ship.\n"), data, "Bad quote !")
+	Equals(t, "Vader's on that ship.\n", string(data), "Bad quote !")
 
 	data, err = readFile(pdwfs, "/empire/vader/quotes")
-	Equals(t, []byte("The Force is strong with this one.\n"), data, "Bad quote !")
+	Equals(t, "The Force is strong with this one.\n", string(data), "Bad quote !")
 
 }

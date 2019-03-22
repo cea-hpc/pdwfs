@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2
+
+- Refactor the inode layer to remove a lock [0b573de]
+- Add redis address and blocksize conf with env var [31292e9]
+- Update examples [55eb7aa]
+
 ## v0.1.1
 
 - Fix errno management from Go to C layer [054dd09]

@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/go-redis/redis"
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/go-redis/redis"
 )
 
 const maxRedisString = 512 * 1024 * 1024 // 512MB

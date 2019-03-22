@@ -3,7 +3,7 @@ IOR START
   verbose=0
   testFile=testFile
   writeFile=1
-  readFile=0
+  readFile={{ read }}
 {% for case in cases %}
 RUN
   numTasks={{ case.numTasks }}
