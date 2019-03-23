@@ -40,7 +40,7 @@ RUN mkdir -p ${HOME}/run
 RUN git clone 'https://github.com/cea-hpc/pdwfs' && \
 	cd pdwfs && make PREFIX=${HOME}/opt/pdwfs install
 
-ENV PATH "${HOME}/opt/pdwfs:${PATH}"
+ENV PATH "${HOME}/opt/pdwfs/bin:${PATH}"
 
 # uncomment to build pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
 # (a modification is needed in the Makefile as well)
