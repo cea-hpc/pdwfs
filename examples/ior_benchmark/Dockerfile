@@ -40,19 +40,18 @@ RUN mkdir -p ${HOME}/run
 RUN git clone 'https://github.com/cea-hpc/pdwfs' && \
 	cd pdwfs && make PREFIX=${HOME}/opt/pdwfs install
 
-ENV PATH "${HOME}/opt/pdwfs/bin:${PATH}"
-
-# uncomment to build pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
-# (a modification is needed in the Makefile as well)
-#ENV PATH "/pdwfs/build/bin:${PATH}"
-
+# pdwfs bin will be first search in /pdwfs/build which is a local build directory (on the host, not in the container, /pdwfs is a mounted volume)
+# if no bin is found, it will look into the container installed version checked out from the GitHub repo
+ENV PATH "/pdwfs/build/bin:${HOME}/opt/pdwfs/bin:${PATH}"
 
 COPY banner.sh /tmp/
 RUN cat /tmp/banner.sh >> ${HOME}/.bashrc
 
 COPY --chown=luke:rebels jupyter_notebook_config.py ${HOME}/.jupyter/
+COPY --chown=luke:rebels ior_script.jinja2 .
+COPY --chown=luke:rebels utils.py .
+COPY --chown=luke:rebels bench.py .
 COPY --chown=luke:rebels notebook/ior_example.ipynb .
-COPY --chown=luke:rebels notebook/ior_script.jinja2 .
 
 CMD bash
 
