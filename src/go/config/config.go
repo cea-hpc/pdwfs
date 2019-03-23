@@ -16,7 +16,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -98,7 +97,6 @@ func New() *Pdwfs {
 				log.Fatalln("Can't convert BlockSize in PDWFS_BLOCKSIZE to int")
 			}
 			mount.BlockSize = size * 1024 * 1024
-			fmt.Println("BlockSize: ", mount.BlockSize)
 		}
 	}
 
