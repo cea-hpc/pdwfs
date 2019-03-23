@@ -11,11 +11,11 @@ all: dirs $(BUILDDIR)/lib/pdwfs.so $(C_TESTS)
 dirs:
 	mkdir -p $(BUILDDIR)/tests
 
-$(BUILDDIR)/pdwfs.o : pdwfs.c
+$(BUILDDIR)/%.o : %.c
 	gcc $(CFLAGS) -fPIC -I$(BUILDDIR)/include -c $< -o $@  
 
-$(BUILDDIR)/lib/pdwfs.so: $(BUILDDIR)/lib/libpdwfs_go.so $(BUILDDIR)/pdwfs.o 
-	gcc $(LDFLAGS) -fPIC -shared -Wl,-rpath=\$$ORIGIN/../lib -o $@ $(BUILDDIR)/pdwfs.o -ldl -lpdwfs_go -L$(BUILDDIR)/lib
+$(BUILDDIR)/lib/pdwfs.so: $(BUILDDIR)/lib/libpdwfs_go.so $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o
+	gcc $(LDFLAGS) -fPIC -shared -Wl,-rpath=\$$ORIGIN/../lib -o $@ $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o -ldl -lpdwfs_go -L$(BUILDDIR)/lib
 
 $(BUILDDIR)/tests/%: $(BUILDDIR)/tests/%.o
 	gcc $(LDFLAGS) -o $@ $^
