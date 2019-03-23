@@ -83,7 +83,7 @@ func New() *Pdwfs {
 	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
 		mount := Mount{
 			Path:          path,
-			BlockSize:     1 * 1024 * 1024, // 1MB
+			BlockSize:     10 * 1024 * 1024, // 10MB
 			WriteParallel: true,
 			ReadParallel:  true,
 		}
