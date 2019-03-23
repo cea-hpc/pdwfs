@@ -23,19 +23,11 @@ import (
 	"github.com/cea-hpc/pdwfs/config"
 )
 
-//InodeRegister ...
-type InodeRegister struct {
-	mountConf *config.Mount
-	client    IRedisClient
-	fiMap     map[string]*Inode
-	root      *Inode
-}
-
 //Inode object
 type Inode struct {
 	mountConf   *config.Mount
 	client      IRedisClient
-	id          string
+	path        string
 	redisBuf    *RedisBlockedBuffer
 	mtx         *sync.RWMutex
 	metaBaseKey string
@@ -43,120 +35,19 @@ type Inode struct {
 	mode        *os.FileMode
 }
 
-//NewInodeRegister constructor
-func NewInodeRegister(redisConf *config.Redis, mountConf *config.Mount) *InodeRegister {
-	client := NewRedisClient(redisConf)
-
-	// create root inode
-	root := NewInode(mountConf, client, mountConf.Path)
-	root.initMeta(true, 0600)
-
-	return &InodeRegister{
-		mountConf: mountConf,
-		client:    client,
-		fiMap:     map[string]*Inode{mountConf.Path: root},
-		root:      root,
-	}
-}
-
-//Finalize ...
-func (ir *InodeRegister) Finalize() error {
-	return ir.client.Close()
-}
-
-//CreateInode ...
-func (ir *InodeRegister) CreateInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
-
-	inode := NewInode(ir.mountConf, ir.client, path)
-	inode.initMeta(dir, mode)
-
-	parent.setChild(inode)
-	ir.fiMap[inode.ID()] = inode
-	return inode
-}
-
-func (ir *InodeRegister) getInode(id string) (*Inode, bool) {
-	if i, ok := ir.fiMap[id]; ok {
-		return i, true
-	}
-	i := NewInode(ir.mountConf, ir.client, id)
-
-	if ok, _ := i.exists(); !ok {
-		return nil, false
-	}
-	ir.fiMap[id] = i
-	return i, true
-}
-
-func (ir *InodeRegister) getChildren(inode *Inode) ([]*Inode, error) {
-	IDs := inode.childrenID()
-	children := make([]*Inode, 0, len(IDs))
-	for _, id := range IDs {
-		child, ok := ir.getInode(id)
-		if !ok {
-			panic("Inode not found")
-		}
-		children = append(children, child)
-	}
-	return children, nil
-}
-
-func (ir *InodeRegister) getFile(inode *Inode, flag int) (File, error) {
-	if inode.IsDir() {
-		return nil, ErrIsDirectory
-	}
-	inodeBuf := inode.getBuffer()
-
-	if hasFlag(os.O_TRUNC, flag) {
-		inodeBuf.Clear()
-	}
-
-	var f File = NewMemFile(inodeBuf, inode.Name(), inode.mtx)
-
-	if hasFlag(os.O_APPEND, flag) {
-		f.Seek(0, os.SEEK_END)
-	} else {
-		f.Seek(0, os.SEEK_SET)
-	}
-	if hasFlag(os.O_RDWR, flag) {
-		return f, nil
-	} else if hasFlag(os.O_WRONLY, flag) {
-		f = &woFile{f}
-	} else {
-		f = &roFile{f}
-	}
-
-	return f, nil
-}
-
-func (ir *InodeRegister) delete(inode *Inode) {
-	if buf := inode.getBuffer(); buf != nil {
-		buf.Clear()
-	}
-	children, _ := ir.getChildren(inode)
-	for _, child := range children {
-		ir.delete(child)
-	}
-	delete(ir.fiMap, inode.Name())
-	err := inode.delMeta()
-	if err != nil {
-		panic(err)
-	}
-}
-
 //NewInode ...
-func NewInode(mountConf *config.Mount, client IRedisClient, id string) *Inode {
+func NewInode(mountConf *config.Mount, client IRedisClient, path string) *Inode {
 	return &Inode{
 		mountConf:   mountConf,
 		client:      client,
-		id:          id,
+		path:        path,
 		mtx:         &sync.RWMutex{},
-		metaBaseKey: "{" + id + "}", // hastag to ensure all metadata keys goes on the same instance
+		metaBaseKey: "{" + path + "}", // hastag to ensure all metadata keys goes on the same instance
 	}
 }
 func (i *Inode) getBuffer() *RedisBlockedBuffer {
 	if i.redisBuf == nil && !i.IsDir() {
-		i.redisBuf = NewRedisBlockedBuffer(i.mountConf, i.client, i.ID())
+		i.redisBuf = NewRedisBlockedBuffer(i.mountConf, i.client, i.Path())
 	}
 	return i.redisBuf
 }
@@ -208,14 +99,14 @@ func (i *Inode) Mode() os.FileMode {
 	return (*i.mode)
 }
 
-//ID returns the ID of the file
-func (i *Inode) ID() string {
-	return i.id
+//Path returns the Path of the file
+func (i *Inode) Path() string {
+	return i.path
 }
 
-//Name returns the inode base name
+//Name returns the inode base name (for os.FileInfo interface)
 func (i *Inode) Name() string {
-	return i.ID()
+	return i.path
 }
 
 //Sys no op (to fulfill os.FileMode interface)
@@ -236,14 +127,72 @@ func (i *Inode) Size() int64 {
 	return i.getBuffer().Size()
 }
 
-func (i *Inode) childrenID() []string {
+func (i *Inode) childrenPath() []string {
 	return i.client.SMembers(i.metaBaseKey + ":children").Val()
 }
 
 func (i *Inode) setChild(child *Inode) error {
-	return i.client.SAdd(i.metaBaseKey+":children", child.ID()).Err()
+	return i.client.SAdd(i.metaBaseKey+":children", child.Path()).Err()
 }
 
 func (i *Inode) removeChild(child *Inode) error {
-	return i.client.SRem(i.metaBaseKey+":children", child.ID()).Err()
+	return i.client.SRem(i.metaBaseKey+":children", child.Path()).Err()
+}
+
+func (i *Inode) getChildren() ([]*Inode, error) {
+	if !i.IsDir() {
+		return nil, ErrNotDirectory
+	}
+	paths, err := i.client.SMembers(i.metaBaseKey + ":children").Result()
+	if err != nil {
+		panic(err)
+	}
+	children := make([]*Inode, 0, len(paths))
+	for _, path := range paths {
+		children = append(children, NewInode(i.mountConf, i.client, path))
+	}
+	return children, nil
+}
+
+func (i *Inode) getFile(flag int) (File, error) {
+	if i.IsDir() {
+		return nil, ErrIsDirectory
+	}
+	inodeBuf := i.getBuffer()
+
+	if hasFlag(os.O_TRUNC, flag) {
+		inodeBuf.Clear()
+	}
+
+	var f File = NewMemFile(inodeBuf, i.Path(), i.mtx)
+
+	if hasFlag(os.O_APPEND, flag) {
+		f.Seek(0, os.SEEK_END)
+	} else {
+		f.Seek(0, os.SEEK_SET)
+	}
+	if hasFlag(os.O_RDWR, flag) {
+		return f, nil
+	} else if hasFlag(os.O_WRONLY, flag) {
+		f = &woFile{f}
+	} else {
+		f = &roFile{f}
+	}
+
+	return f, nil
+}
+
+func (i *Inode) remove() {
+	if buf := i.getBuffer(); buf != nil {
+		buf.Clear()
+	}
+	if children, _ := i.getChildren(); children != nil {
+		for _, child := range children {
+			child.remove()
+		}
+	}
+	err := i.delMeta()
+	if err != nil {
+		panic(err)
+	}
 }

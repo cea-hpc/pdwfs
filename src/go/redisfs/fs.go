@@ -66,20 +66,28 @@ const PathSeparator = "/"
 // RedisFS is a in-memory filesystem
 type RedisFS struct {
 	mountConf *config.Mount
-	inodes    *InodeRegister
+	client    IRedisClient
+	inodes    map[string]*Inode
 }
 
 // NewRedisFS a new RedisFS filesystem which entirely resides in memory
 func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
+	client := NewRedisClient(redisConf)
+
+	// create root inode
+	root := NewInode(mountConf, client, mountConf.Path)
+	root.initMeta(true, 0600)
+
 	return &RedisFS{
 		mountConf: mountConf,
-		inodes:    NewInodeRegister(redisConf, mountConf),
+		inodes:    map[string]*Inode{root.Path(): root},
+		client:    client,
 	}
 }
 
 // Finalize performs close up actions on the virtual file system
 func (fs *RedisFS) Finalize() error {
-	return fs.inodes.Finalize()
+	return fs.client.Close()
 }
 
 // ValidatePath ensures path belongs to a filesystem tree catched by pdwfs
@@ -94,13 +102,38 @@ func (fs *RedisFS) ValidatePath(path string) error {
 	return nil
 }
 
+func (fs *RedisFS) createInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
+	i := NewInode(fs.mountConf, fs.client, path)
+	i.initMeta(dir, mode)
+	parent.setChild(i)
+	fs.inodes[i.Path()] = i
+	return i
+}
+
+func (fs *RedisFS) getInode(path string) (*Inode, bool) {
+	if i, ok := fs.inodes[path]; ok {
+		return i, true
+	}
+	i := NewInode(fs.mountConf, fs.client, path)
+	if ok, _ := i.exists(); !ok {
+		return nil, false
+	}
+	fs.inodes[i.Path()] = i
+	return i, true
+}
+
+func (fs *RedisFS) removeInode(i *Inode) {
+	i.remove()
+	delete(fs.inodes, i.Path())
+}
+
 func (fs *RedisFS) fileInfo(abspath string) (parent, node *Inode, err error) {
 	parentPath := filepath.Dir(abspath)
-	fiParent, _ := fs.inodes.getInode(parentPath)
+	fiParent, _ := fs.getInode(parentPath)
 	if fiParent == nil || !fiParent.IsDir() {
 		return nil, nil, os.ErrNotExist
 	}
-	fiNode, _ := fs.inodes.getInode(abspath)
+	fiNode, _ := fs.getInode(abspath)
 	return fiParent, fiNode, nil
 }
 
@@ -120,7 +153,7 @@ func (fs *RedisFS) Mkdir(name string, perm os.FileMode) error {
 	if fiNode != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: os.ErrExist}
 	}
-	fs.inodes.CreateInode(path, true, perm, fiParent)
+	fs.createInode(path, true, perm, fiParent)
 	return nil
 }
 
@@ -153,7 +186,7 @@ func (fs *RedisFS) ReadDir(path string) ([]os.FileInfo, error) {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: ErrNotDirectory}
 	}
 
-	fis, err := fs.inodes.getChildren(fi)
+	fis, err := fi.getChildren()
 	if err != nil {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: err}
 	}
@@ -205,7 +238,7 @@ func (fs *RedisFS) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 		if !hasFlag(os.O_CREATE, flag) {
 			return nil, &os.PathError{Op: "open", Path: name, Err: os.ErrNotExist}
 		}
-		fiNode = fs.inodes.CreateInode(path, false, perm, fiParent)
+		fiNode = fs.createInode(path, false, perm, fiParent)
 	} else { // file exists
 		if hasFlag(os.O_CREATE|os.O_EXCL, flag) {
 			return nil, &os.PathError{Op: "open", Path: name, Err: os.ErrExist}
@@ -214,7 +247,7 @@ func (fs *RedisFS) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 			return nil, &os.PathError{Op: "open", Path: name, Err: ErrIsDirectory}
 		}
 	}
-	return fs.inodes.getFile(fiNode, flag)
+	return fiNode.getFile(flag)
 }
 
 // roFile wraps the given file and disables Write(..) operation.
@@ -255,7 +288,7 @@ func (fs *RedisFS) Remove(name string) error {
 		return &os.PathError{Op: "remove", Path: name, Err: os.ErrNotExist}
 	}
 	fiParent.removeChild(fiNode)
-	fs.inodes.delete(fiNode)
+	fs.removeInode(fiNode)
 	return nil
 }
 
