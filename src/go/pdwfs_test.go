@@ -82,6 +82,8 @@ func TestMultiMount(t *testing.T) {
 		BlockSize: 1024, // 1KB
 	}
 	pdwfs := NewPdwFS(conf)
+	defer pdwfs.mounts["/rebels/luke"].GetClient().FlushAll()
+	defer pdwfs.mounts["/empire/vader"].GetClient().FlushAll()
 
 	_, err := writeFile(pdwfs, "/rebels/luke/quotes", []byte("Vader's on that ship.\n"), os.FileMode(0777))
 	Ok(t, err)

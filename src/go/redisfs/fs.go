@@ -90,6 +90,11 @@ func (fs *RedisFS) Finalize() error {
 	return fs.client.Close()
 }
 
+// GetClient returns the Redis client
+func (fs *RedisFS) GetClient() IRedisClient {
+	return fs.client
+}
+
 // ValidatePath ensures path belongs to a filesystem tree catched by pdwfs
 func (fs *RedisFS) ValidatePath(path string) error {
 	p, err := filepath.Abs(path)

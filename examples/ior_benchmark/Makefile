@@ -1,6 +1,5 @@
 
 # uncomment to mount pdwfs sources folder into the container (for debug/development)
-# a modification is needed in the Dockerfile as well
 DOCKER_RUN_OPT = -v $(shell pwd)/../../:/pdwfs
 
 # uncomment to allow stracing in docker (for debug)
