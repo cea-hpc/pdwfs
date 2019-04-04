@@ -8,6 +8,9 @@ build:
 run: build
 	docker run $(DOCKER_RUN_OPT) -it --rm -v $(shell pwd)/..:/home/dev/pdwfs -w /home/dev/pdwfs --name pdwfs-dev pdwfs
 
+connect:
+	docker exec -it pdwfs-dev bash
+
 clean:
 	docker rm $(shell docker ps -qa --no-trunc --filter "status=exited"); \
 	docker rmi $(shell docker images --filter "dangling=true" -q --no-trunc)
