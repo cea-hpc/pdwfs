@@ -42,9 +42,9 @@ RUN cd src && git clone 'https://github.com/cea-hpc/pdwfs' && \
 
 ENV PATH "${HOME}/opt/pdwfs/bin:${PATH}"
 
-# uncomment to build pdwfs from a volume mounted on the pdwfs source directory on the host (for debug/development)
-# (a modification is needed in the Makefile as well)
-#ENV PATH "/pdwfs/build/bin:${PATH}"
+# pdwfs bin will be first search in /pdwfs/build which is a local build directory (on the host, not in the container, /pdwfs is a mounted volume)
+# if no bin is found, it will look into the container installed version checked out from the GitHub repo
+ENV PATH "/pdwfs/build/bin:${PATH}"
 
 COPY banner.sh /tmp/
 RUN cat /tmp/banner.sh >> ${HOME}/.bashrc
