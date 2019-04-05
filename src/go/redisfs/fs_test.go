@@ -152,6 +152,22 @@ func TestMkdirTree(t *testing.T) {
 	//TODO: Subdir of file
 }
 
+func TestMkdirMountPath(t *testing.T) {
+	client, redisConf := GetRedisClient()
+	defer client.FlushAll()
+
+	mountConf := GetMountPathConf()
+	mountConf.Path = "/foo"
+
+	fs := NewRedisFS(redisConf, mountConf)
+
+	err := fs.Mkdir("/foo", 0)
+	Ok(t, err)
+
+	err = fs.Mkdir("/foo/bar", 0)
+	Ok(t, err)
+}
+
 func TestReadDir(t *testing.T) {
 	client, redisConf := GetRedisClient()
 	defer client.FlushAll()

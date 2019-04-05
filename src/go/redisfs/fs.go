@@ -38,6 +38,8 @@ var (
 	ErrNotDirectory = errors.New("Is not a directory")
 	// ErrDirNotEmpty is returned if a directory is not empty (rmdir)
 	ErrDirNotEmpty = errors.New("Directory is not empty")
+	// ErrParentDirNotExist is returned if the parent directory does not exist
+	ErrParentDirNotExist = errors.New("Parent directory does not exist")
 )
 
 // File represents a File with common operations.
@@ -68,6 +70,7 @@ type RedisFS struct {
 	mountConf *config.Mount
 	client    IRedisClient
 	inodes    map[string]*Inode
+	root      *Inode
 }
 
 // NewRedisFS a new RedisFS filesystem which entirely resides in memory
@@ -75,13 +78,18 @@ func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
 	client := NewRedisClient(redisConf)
 
 	// create root inode
+	//FIXME: mount path (root) should only be created it it exists on the FS at startup
 	root := NewInode(mountConf, client, mountConf.Path)
-	root.initMeta(true, 0600)
+	err := root.initMeta(true, 0600)
+	if err != nil {
+		panic(err)
+	}
 
 	return &RedisFS{
 		mountConf: mountConf,
 		inodes:    map[string]*Inode{root.Path(): root},
 		client:    client,
+		root:      root,
 	}
 }
 
@@ -109,7 +117,10 @@ func (fs *RedisFS) ValidatePath(path string) error {
 
 func (fs *RedisFS) createInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
 	i := NewInode(fs.mountConf, fs.client, path)
-	i.initMeta(dir, mode)
+	err := i.initMeta(dir, mode)
+	if err != nil {
+		panic(err)
+	}
 	parent.setChild(i)
 	fs.inodes[i.Path()] = i
 	return i
@@ -133,10 +144,13 @@ func (fs *RedisFS) removeInode(i *Inode) {
 }
 
 func (fs *RedisFS) fileInfo(abspath string) (parent, node *Inode, err error) {
+	if abspath == fs.root.Path() {
+		return nil, fs.root, nil
+	}
 	parentPath := filepath.Dir(abspath)
 	fiParent, _ := fs.getInode(parentPath)
 	if fiParent == nil || !fiParent.IsDir() {
-		return nil, nil, os.ErrNotExist
+		return nil, nil, ErrParentDirNotExist
 	}
 	fiNode, _ := fs.getInode(abspath)
 	return fiParent, fiNode, nil
@@ -154,6 +168,12 @@ func (fs *RedisFS) Mkdir(name string, perm os.FileMode) error {
 	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: err}
+	}
+	if fiNode == fs.root {
+		//FIXME: hack to cover the case the app creates the mount path directory,
+		// because we create the root dir at initialization of RedisFS, it should fail with ErrExist.
+		// Proper way to do this is to create the root dir in RedisFS only if it already exists on FS at startup
+		return nil
 	}
 	if fiNode != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: os.ErrExist}
