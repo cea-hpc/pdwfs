@@ -1,5 +1,5 @@
-CFLAGS = -std=c99 -g -O2 -Wall -Werror
-LDFLAGS = 
+CFLAGS = -std=c99 -g -O2 -Wall -Werror $(shell pkg-config --cflags glib-2.0)
+LDFLAGS = $(shell pkg-config --libs glib-2.0)
 
 BUILDDIR=../../build
 SCRIPTSDIR=../../scripts
@@ -14,8 +14,8 @@ dirs:
 $(BUILDDIR)/%.o : %.c
 	gcc $(CFLAGS) -fPIC -I$(BUILDDIR)/include -c $< -o $@  
 
-$(BUILDDIR)/lib/pdwfs.so: $(BUILDDIR)/lib/libpdwfs_go.so $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o
-	gcc $(LDFLAGS) -fPIC -shared -Wl,-rpath=\$$ORIGIN/../lib -o $@ $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o -ldl -lpdwfs_go -L$(BUILDDIR)/lib
+$(BUILDDIR)/lib/pdwfs.so: $(BUILDDIR)/lib/libpdwfs_go.so $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o $(BUILDDIR)/utils.o
+	gcc $(LDFLAGS) -fPIC -shared -Wl,-rpath=\$$ORIGIN/../lib -o $@ $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o $(BUILDDIR)/utils.o -ldl -lpdwfs_go -L$(BUILDDIR)/lib
 
 $(BUILDDIR)/tests/%: $(BUILDDIR)/tests/%.o
 	gcc $(LDFLAGS) -o $@ $^
