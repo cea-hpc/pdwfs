@@ -81,6 +81,10 @@ func NewRedisClient(conf *config.Redis) IRedisClient {
 			IdleTimeout: 1 * time.Hour,
 		}
 		client = redis.NewRing(opt)
+		err := client.Ping().Err()
+		if err != nil {
+			panic(err)
+		}
 	}
 	return client
 }

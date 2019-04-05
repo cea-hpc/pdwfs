@@ -77,7 +77,14 @@ func New() *Pdwfs {
 	}
 
 	if addrs := os.Getenv("PDWFS_REDIS"); addrs != "" {
-		conf.RedisConf.RedisAddrs = strings.Split(addrs, ",")
+		s := strings.Split(addrs, ",")
+		var a []string
+		for _, i := range s {
+			if i != "" {
+				a = append(a, i)
+			}
+		}
+		conf.RedisConf.RedisAddrs = a
 	}
 
 	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
