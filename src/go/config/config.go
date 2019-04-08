@@ -16,6 +16,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -90,13 +91,12 @@ func New() *Pdwfs {
 	}
 
 	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
-		mount := Mount{
+		conf.Mounts[path] = &Mount{
 			Path:          path,
 			BlockSize:     10 * 1024 * 1024, // 10MB
 			WriteParallel: true,
 			ReadParallel:  true,
 		}
-		conf.Mounts[path] = &mount
 	}
 
 	if blockSize := os.Getenv("PDWFS_BLOCKSIZE"); blockSize != "" {
@@ -122,7 +122,7 @@ func New() *Pdwfs {
 		}
 	}
 
-	// Options normalization
+	// Options verifications and normalization
 
 	if val := os.Getenv("PDWFS_LOGS"); val == "" {
 		log.SetOutput(ioutil.Discard)
@@ -134,8 +134,10 @@ func New() *Pdwfs {
 
 	for path, conf := range conf.Mounts {
 		conf.Path = validateMountPath(path)
-		// NOTE: we may add a different Redis database index per mount point for isolation
-		// (but not suitable with Redis Cluster)
+		if conf.BlockSize > 512*1024*1024 {
+			err := fmt.Sprintf("Mount point '%s' block size (%dMB) is above what Redis can sustain, set block size <= 512MB", path, conf.BlockSize/(1024*1024))
+			panic(err)
+		}
 		normalized[conf.Path] = conf
 	}
 	conf.Mounts = normalized
