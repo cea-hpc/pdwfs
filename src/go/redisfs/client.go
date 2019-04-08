@@ -49,18 +49,23 @@ type IRedisClient interface {
 	FlushAll() *redis.StatusCmd
 }
 
+// RedisClient implements the IRedisClient interface
+type RedisClient struct {
+	IRedisClient
+	conf *config.Redis
+}
+
+// Unlink can redirect to Del command by config (use in testing as Unlink is not implemented by miniredis)
+func (c RedisClient) Unlink(keys ...string) *redis.IntCmd {
+	if c.conf.UseUnlink {
+		return c.IRedisClient.Unlink(keys...)
+	}
+	return c.Del(keys...)
+}
+
 // NewRedisClient returns a redis client matching the IRedisClient interface
 func NewRedisClient(conf *config.Redis) IRedisClient {
 	var client IRedisClient
-	/*
-		// single Redis client
-		client := redis.NewClient(&redis.Options{
-			Addr:     conf.RedisAddrs[0],
-			PoolSize: 50,
-			Password: "", // no password set
-			DB:       0,  // use default DB
-		})
-	*/
 	if conf.RedisCluster {
 		// Redis cluster client
 		//FIXME: cluter is not working...
@@ -75,10 +80,12 @@ func NewRedisClient(conf *config.Redis) IRedisClient {
 			addrs[fmt.Sprintf("shard%d", i)] = addr
 		}
 		opt := &redis.RingOptions{
-			Addrs:       addrs,
-			PoolTimeout: 1 * time.Hour, // deactivate timeouts
-			ReadTimeout: 1 * time.Hour,
-			IdleTimeout: 1 * time.Hour,
+			Addrs: addrs,
+			// disable timeouts and heartbeating(sort of)
+			PoolTimeout:        1 * time.Hour,
+			ReadTimeout:        1 * time.Hour,
+			IdleTimeout:        1 * time.Hour,
+			HeartbeatFrequency: 1 * time.Hour,
 		}
 		client = redis.NewRing(opt)
 		err := client.Ping().Err()
@@ -86,7 +93,7 @@ func NewRedisClient(conf *config.Redis) IRedisClient {
 			panic(err)
 		}
 	}
-	return client
+	return RedisClient{client, conf}
 }
 
 // Buffer is a linear addressable abstract structure to store data

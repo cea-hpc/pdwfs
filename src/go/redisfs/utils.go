@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis"
 	"github.com/cea-hpc/pdwfs/config"
 )
 
@@ -59,10 +60,17 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 	}
 }
 
-//GetRedisClient returns a new Redis client and the configuration object
-func GetRedisClient() (IRedisClient, *config.Redis) {
-	redisConf := &config.Redis{RedisAddrs: []string{":6379"}}
-	return NewRedisClient(redisConf), redisConf
+//InitTestRedis returns a new miniredis server and client
+func InitTestRedis() (*miniredis.Miniredis, IRedisClient, *config.Redis) {
+	s, err := miniredis.Run()
+	if err != nil {
+		panic(err)
+	}
+	redisConf := &config.Redis{
+		RedisAddrs: []string{s.Addr()},
+		UseUnlink:  false, // miniredis does not support Unlink, defaults to Del
+	}
+	return s, NewRedisClient(redisConf), redisConf
 }
 
 //GetMountPathConf returns a default configuration (for testing)

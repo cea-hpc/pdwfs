@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_feof() {
+int test_feof() {
  
     FILE* f = fopen(TESTFILE, "w");
     CHECK_NULL(f, "fopen")
@@ -45,8 +45,6 @@ void test_feof() {
 
     fclose(f);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_feof();
+    return 0;
 }

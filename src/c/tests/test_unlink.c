@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_unlink() {
+int test_unlink() {
 
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -46,8 +46,6 @@ void test_unlink() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_unlink();
- }
+    return 0;
+}

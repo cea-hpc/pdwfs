@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_fputc_fgetc() {
+int test_fputc_fgetc() {
  
     FILE* f = fopen(TESTFILE, "w");
     CHECK_NULL(f, "fopen")
@@ -41,8 +41,6 @@ void test_fputc_fgetc() {
 
     fclose(f);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_fputc_fgetc();
+    return 0;
 }

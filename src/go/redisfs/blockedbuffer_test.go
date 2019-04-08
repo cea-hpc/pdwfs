@@ -21,8 +21,8 @@ import (
 )
 
 func TestBlocksLayout(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = 1024
@@ -102,8 +102,8 @@ func TestBlocksLayout(t *testing.T) {
 }
 
 func writeBlockedBuffer(t *testing.T, blockSize int, datav [][]byte, offset int64) (*RedisBlockedBuffer, error) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = blockSize
@@ -215,8 +215,8 @@ func TestWriteBlockedBuffer(t *testing.T) {
 }
 
 func TestEndOfBlockedBuffer(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = 20 // 20 bytes block size
@@ -248,8 +248,8 @@ func TestEndOfBlockedBuffer(t *testing.T) {
 }
 
 func TestResizeBlockedBuffer(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = 100 // 100 bytes block size
@@ -297,8 +297,8 @@ func TestResizeBlockedBuffer(t *testing.T) {
 }
 
 func TestTruncate(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = 20 // 20 bytes block size
@@ -326,8 +326,8 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestMetaBlock(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = 20 // 20 bytes block size

@@ -18,7 +18,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_fopen() {
+int test_fopen_fclose() {
     
     FILE *f = NULL;
     
@@ -33,8 +33,6 @@ void test_fopen() {
 
     ret = unlink(TESTFILE);
     CHECK_ERROR(ret, "unlink")
-}
 
-int main() {
-    test_fopen();
+    return 0;
 }

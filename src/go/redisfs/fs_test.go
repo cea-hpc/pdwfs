@@ -22,8 +22,8 @@ import (
 )
 
 func TestCreate(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -67,8 +67,8 @@ func TestCreate(t *testing.T) {
 }
 
 func TestCreateRelative(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	cwd, err := os.Getwd()
@@ -85,8 +85,8 @@ func TestCreateRelative(t *testing.T) {
 }
 
 func TestMkdirAbs(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -109,8 +109,8 @@ func TestMkdirAbs(t *testing.T) {
 }
 
 func TestMkdirRel(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	cwd, err := os.Getwd()
@@ -127,8 +127,8 @@ func TestMkdirRel(t *testing.T) {
 }
 
 func TestMkdirTree(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -153,8 +153,8 @@ func TestMkdirTree(t *testing.T) {
 }
 
 func TestMkdirMountPath(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/foo"
@@ -169,8 +169,8 @@ func TestMkdirMountPath(t *testing.T) {
 }
 
 func TestReadDir(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -222,8 +222,8 @@ func TestReadDir(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -281,8 +281,8 @@ func TestRemove(t *testing.T) {
 }
 
 func TestReadWrite(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -337,8 +337,8 @@ func TestReadWrite(t *testing.T) {
 }
 
 func TestOpenRO(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -356,8 +356,8 @@ func TestOpenRO(t *testing.T) {
 }
 
 func TestOpenWO(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -389,8 +389,8 @@ func TestOpenWO(t *testing.T) {
 }
 
 func TestOpenAppend(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -436,8 +436,8 @@ func TestOpenAppend(t *testing.T) {
 }
 
 func TestTruncateToLength(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -489,8 +489,8 @@ func TestTruncateToLength(t *testing.T) {
 }
 
 func TestTruncateToZero(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -522,8 +522,8 @@ func TestTruncateToZero(t *testing.T) {
 }
 
 func TestStat(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"
@@ -588,8 +588,8 @@ func readFile(fs *RedisFS, name string) ([]byte, error) {
 }
 
 func TestVolumesConcurrentAccess(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	server, _, redisConf := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 	mountConf.Path = "/"

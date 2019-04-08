@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/alicebob/miniredis"
 )
 
 const (
@@ -31,25 +33,25 @@ var (
 	large = strings.Repeat("0123456789", 200) // 2000 bytes
 )
 
-func setupMemFile(t *testing.T) (*MemFile, IRedisClient) {
-	client, _ := GetRedisClient()
+func setupMemFile(t *testing.T) (*MemFile, *miniredis.Miniredis) {
+	server, client, _ := InitTestRedis()
 	conf := GetMountPathConf()
 
 	buf := NewRedisBuffer(conf, client, "Key")
 	f := NewMemFile(buf, "/path/to/file", &sync.RWMutex{})
-	return f, client
+	return f, server
 }
 
 func TestFileInterface(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, server := setupMemFile(t)
+	defer server.Close()
 
 	_ = File(f)
 }
 
 func TestWrite(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, server := setupMemFile(t)
+	defer server.Close()
 
 	// Write first dots
 	if n, err := f.Write([]byte(dots)); err != nil {
@@ -126,8 +128,8 @@ func TestWrite(t *testing.T) {
 }
 
 func TestSeek(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, server := setupMemFile(t)
+	defer server.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -155,8 +157,8 @@ func TestSeek(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, server := setupMemFile(t)
+	defer server.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -176,8 +178,8 @@ func TestRead(t *testing.T) {
 }
 
 func TestReadAt(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, server := setupMemFile(t)
+	defer server.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -213,8 +215,8 @@ func TestReadAt(t *testing.T) {
 }
 
 func TestSize(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, server := setupMemFile(t)
+	defer server.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {

@@ -21,7 +21,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_pwrite() {
+int test_pwrite() {
 
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -49,8 +49,6 @@ void test_pwrite() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_pwrite();
+    return 0;
 }

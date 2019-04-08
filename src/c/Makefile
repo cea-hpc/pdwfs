@@ -4,9 +4,9 @@ LDFLAGS = $(shell pkg-config --libs glib-2.0)
 BUILDDIR=../../build
 SCRIPTSDIR=../../scripts
 
-C_TESTS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%, $(wildcard tests/*.c))
+C_OBJ = $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o $(BUILDDIR)/utils.o
 
-all: dirs $(BUILDDIR)/lib/pdwfs.so $(C_TESTS)
+all: dirs $(BUILDDIR)/lib/pdwfs.so
 
 dirs:
 	mkdir -p $(BUILDDIR)/tests
@@ -14,27 +14,23 @@ dirs:
 $(BUILDDIR)/%.o : %.c
 	gcc $(CFLAGS) -fPIC -I$(BUILDDIR)/include -c $< -o $@  
 
-$(BUILDDIR)/lib/pdwfs.so: $(BUILDDIR)/lib/libpdwfs_go.so $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o $(BUILDDIR)/utils.o
-	gcc $(LDFLAGS) -fPIC -shared -Wl,-rpath=\$$ORIGIN/../lib -o $@ $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o $(BUILDDIR)/utils.o -ldl -lpdwfs_go -L$(BUILDDIR)/lib
-
-$(BUILDDIR)/tests/%: $(BUILDDIR)/tests/%.o
-	gcc $(LDFLAGS) -o $@ $^
-
-$(BUILDDIR)/tests/%.o : tests/%.c
-	gcc $(CFLAGS) -c $< -o $@  
+$(BUILDDIR)/lib/pdwfs.so: $(BUILDDIR)/lib/libpdwfs_go.so $(C_OBJ)
+	gcc $(LDFLAGS) -fPIC -shared -Wl,-rpath=\$$ORIGIN/../lib -o $@ $(C_OBJ) -ldl -lpdwfs_go -L$(BUILDDIR)/lib
 
 clean:
 	rm -f $(BUILDDIR)/pdwfs.o
 	rm -f $(BUILDDIR)/lib/pdwfs.so
-	rm -rf $(BUILDDIR)/tests
+	make -C tests clean
 
-test-runs := $(addsuffix .test-disk,$(C_TESTS)) $(addsuffix .test-pdwfs,$(C_TESTS))
-
-test: all $(test-runs)
-
-%.test-disk:  # execute tests on disk
-	$(subst .test-disk,,$@)
-
-%.test-pdwfs: $(BUILDDIR)/lib/pdwfs.so  # execute tests through pdwfs
-	$(BUILDDIR)/bin/pdwfs -p . -- $(subst .test-pdwfs,,$@)
-	@redis-cli flushall > /dev/null
+test: all
+	make -C tests
+	@echo "*****************************"
+	@echo "* Execute testsuite on disk *"
+	@echo "*****************************"
+	- $(BUILDDIR)/tests/testsuite
+	@echo "***********************************"
+	@echo "* Execute testsuite through pdwfs *"
+	@echo "***********************************"
+	redis-server --daemonize yes --save ""
+	- $(BUILDDIR)/bin/pdwfs -p . -- $(BUILDDIR)/tests/testsuite
+	redis-cli shutdown   

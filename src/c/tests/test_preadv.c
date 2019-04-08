@@ -22,7 +22,7 @@
 #include <sys/uio.h>
 #include "tests.h"
 
-void test_preadv() {
+int test_preadv() {
     
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -50,8 +50,6 @@ void test_preadv() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_preadv();
+    return 0;
 }

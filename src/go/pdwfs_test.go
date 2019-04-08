@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/alicebob/miniredis"
 	"github.com/cea-hpc/pdwfs/config"
 )
 
@@ -70,7 +71,12 @@ func readFile(pdwfs *PdwFS, filename string) ([]byte, error) {
 
 func TestMultiMount(t *testing.T) {
 
+	s, err := miniredis.Run()
+	Ok(t, err)
+	defer s.Close()
+
 	conf := config.New()
+	conf.RedisConf.RedisAddrs = []string{s.Addr()}
 
 	// create two fake mount paths
 	conf.Mounts["/rebels/luke"] = &config.Mount{
@@ -85,7 +91,7 @@ func TestMultiMount(t *testing.T) {
 	defer pdwfs.mounts["/rebels/luke"].GetClient().FlushAll()
 	defer pdwfs.mounts["/empire/vader"].GetClient().FlushAll()
 
-	_, err := writeFile(pdwfs, "/rebels/luke/quotes", []byte("Vader's on that ship.\n"), os.FileMode(0777))
+	_, err = writeFile(pdwfs, "/rebels/luke/quotes", []byte("Vader's on that ship.\n"), os.FileMode(0777))
 	Ok(t, err)
 
 	_, err = writeFile(pdwfs, "/empire/vader/quotes", []byte("The Force is strong with this one.\n"), os.FileMode(0777))

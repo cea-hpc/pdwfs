@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_fprintf() {
+int test_fprintf() {
  
     FILE* f = fopen(TESTFILE, "w");
     CHECK_NULL(f, "fopen")
@@ -45,8 +45,6 @@ void test_fprintf() {
 
     fclose(f);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_fprintf();
+    return 0;
 }

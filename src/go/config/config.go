@@ -37,6 +37,7 @@ type Redis struct {
 	RedisAddrs        []string
 	RedisCluster      bool
 	RedisClusterAddrs []string
+	UseUnlink         bool
 }
 
 //Pdwfs configuration
@@ -69,6 +70,7 @@ func New() *Pdwfs {
 		RedisAddrs:        []string{":6379"},
 		RedisCluster:      false,
 		RedisClusterAddrs: []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
+		UseUnlink:         true,
 	}
 
 	conf := Pdwfs{

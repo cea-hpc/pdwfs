@@ -20,7 +20,7 @@
 #include <sys/uio.h>
 #include "tests.h"
 
-void test_readv() {
+int test_readv() {
     
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -48,8 +48,6 @@ void test_readv() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_readv();
+    return 0;
 }

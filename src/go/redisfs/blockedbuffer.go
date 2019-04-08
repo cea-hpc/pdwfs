@@ -20,8 +20,8 @@ import (
 	"math/bits"
 	"sync"
 
-	"github.com/go-redis/redis"
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/go-redis/redis"
 )
 
 var (

@@ -21,8 +21,8 @@ import (
 )
 
 func TestWriteBuffer(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 
@@ -105,8 +105,8 @@ func TestWriteBuffer(t *testing.T) {
 // TestBufferGrowWriteAndSeek tests if Write and Seek inside the
 // Buffers boundaries result in invalid growth
 func TestBufferGrowWriteAndSeek(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 
@@ -144,8 +144,8 @@ func TestBufferGrowWriteAndSeek(t *testing.T) {
 }
 
 func TestEndOfBuffer(t *testing.T) {
-	client, _ := GetRedisClient()
-	defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	conf := GetMountPathConf()
 	conf.BlockSize = 20 // 20 bytes capacity Buffer

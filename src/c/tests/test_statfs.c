@@ -20,7 +20,7 @@
 #include <sys/statfs.h>
 #include "tests.h"
 
-void test_statfs() {
+int test_statfs() {
     
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -36,8 +36,6 @@ void test_statfs() {
     }
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_statfs();
+    return 0;
 }

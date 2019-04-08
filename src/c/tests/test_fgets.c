@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_fgets() {
+int test_fgets() {
  
     FILE* f = fopen(TESTFILE, "w");
     CHECK_NULL(f, "fopen")
@@ -45,8 +45,6 @@ void test_fgets() {
 
     fclose(f);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_fgets();
+    return 0;
 }

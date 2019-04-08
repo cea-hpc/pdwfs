@@ -20,8 +20,8 @@ import (
 )
 
 func TestInodeMeta(t *testing.T) {
-	client, _ := GetRedisClient()
-	//defer client.FlushAll()
+	server, client, _ := InitTestRedis()
+	defer server.Close()
 
 	mountConf := GetMountPathConf()
 
