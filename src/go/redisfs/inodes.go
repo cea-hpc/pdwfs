@@ -79,8 +79,11 @@ func (i *Inode) delMeta() error {
 //IsDir ...
 func (i *Inode) IsDir() bool {
 	if i.isDir == nil {
-		res := i.client.Get(i.metaBaseKey+":isDir").Val() == "1"
-		i.isDir = &res
+		key := i.metaBaseKey + ":isDir"
+		res, err := i.client.Get(key).Result()
+		checkKeyExists(err, key)
+		isDir := res == "1"
+		i.isDir = &isDir
 	}
 	return (*i.isDir)
 }
@@ -88,11 +91,11 @@ func (i *Inode) IsDir() bool {
 //Mode returns the inode access mode
 func (i *Inode) Mode() os.FileMode {
 	if i.mode == nil {
-		val := i.client.Get(i.metaBaseKey + ":mode").Val()
+		key := i.metaBaseKey + ":mode"
+		val, err := i.client.Get(key).Result()
+		checkKeyExists(err, key)
 		res, err := strconv.Atoi(val)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 		m := os.FileMode(res)
 		i.mode = &m
 	}

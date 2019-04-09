@@ -93,6 +93,15 @@ func NewRedisClient(conf *config.Redis) IRedisClient {
 	return RedisClient{client, conf}
 }
 
+func checkKeyExists(err error, key string) {
+	if err != nil && err == redis.Nil {
+		panic(fmt.Errorf("Redis key not found: %s", key))
+	}
+	if err != nil {
+		panic(err)
+	}
+}
+
 // Buffer is a linear addressable abstract structure to store data
 type Buffer interface {
 	WriteAt([]byte, int64) (int, error)
