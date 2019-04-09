@@ -23,8 +23,6 @@ import (
 	"github.com/go-redis/redis"
 )
 
-const maxRedisString = 512 * 1024 * 1024 // 512MB
-
 var (
 	// ErrEndOfBuffer is thrown when read past the buffer size
 	ErrEndOfBuffer = errors.New("End of Buffer")

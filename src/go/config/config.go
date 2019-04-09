@@ -25,6 +25,8 @@ import (
 	"strings"
 )
 
+const maxRedisString = 512 * 1024 * 1024 // 512MB
+
 func try(err error) {
 	if err != nil {
 		panic(err)
@@ -129,7 +131,7 @@ func New() *Pdwfs {
 
 	for path, conf := range conf.Mounts {
 		conf.Path = validateMountPath(path)
-		if conf.BlockSize > 512*1024*1024 {
+		if conf.BlockSize > maxRedisString {
 			err := fmt.Sprintf("Mount point '%s' block size (%dMB) is above what Redis can sustain, set block size <= 512MB", path, conf.BlockSize/(1024*1024))
 			panic(err)
 		}
