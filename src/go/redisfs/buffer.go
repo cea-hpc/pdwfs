@@ -61,72 +61,29 @@ func (b *RedisBuffer) Size() int64 {
 }
 
 func byte2StringNoCopy(b []byte) string {
-	// is this really not copying b ??
 	return *(*string)(unsafe.Pointer(&b))
 }
 
 func string2byteNoCopy(s string) []byte {
-	// is this really not copying s ??
 	return *(*[]byte)(unsafe.Pointer(&s))
-}
-
-func (b *RedisBuffer) writeString(off int64, data string) (int, error) {
-	newLen, err := b.redis.SetRange(b.key, off, data).Result()
-	if err != nil {
-		return 0, err
-	}
-	dataLen := len(data)
-	if (off + int64(dataLen)) > newLen {
-		// FIXME: to be tested
-		return int(newLen - off), ErrMaxRedisString
-	}
-	return dataLen, nil
-
 }
 
 //WriteAt writes data to the Buffer starting at byte offset off.
 func (b *RedisBuffer) WriteAt(data []byte, off int64) (int, error) {
-	return b.writeString(off, byte2StringNoCopy(data))
+	try(b.redis.SetRange(b.key, off, byte2StringNoCopy(data)).Err())
+	return len(data), nil
 }
 
 //WriteVecAt writes a vector of byte slices to the Buffer starting at byte offset off.
 func (b *RedisBuffer) WriteVecAt(datav [][]byte, off int64) (int, error) {
 	var n int
 	for _, data := range datav {
-		wrote, err := b.writeString(off, byte2StringNoCopy(data))
-		if err != nil {
-			return n, err
-		}
-		off += int64(wrote)
-		n += wrote
-	}
-	return n, nil
-}
-
-/*
-//WriteVecAt writes a vector of byte slices to the Buffer starting at byte offset off.
-func (b *RedisBuffer) WriteVecAt(datav [][]byte, off int64) (int, error) {
-	var n int
-	pipeRet := make([]*redis.IntCmd, len(datav))
-	pipe := b.redis.Pipeline()
-	for i, data := range datav {
-		pipeRet[i] = pipe.SetRange(b.key, off+int64(n), byte2StringNoCopy(data))
+		try(b.redis.SetRange(b.key, off, byte2StringNoCopy(data)).Err())
+		off += int64(len(data))
 		n += len(data)
 	}
-	_, err := pipe.Exec()
-	if err != nil {
-		return -1, err
-	}
-
-	newLen := pipeRet[len(datav)-1].Val() // total length of string after pipe execution
-	if (off + int64(n)) > newLen {
-		// all data has not been written, Redis string limit may be been reached
-		// FIXME: to be tested
-		return int(newLen - off), ErrMaxRedisString
-	}
 	return n, nil
 }
-*/
 
 //Clear resets the Buffer to default capacity and zero length
 func (b *RedisBuffer) Clear() error {

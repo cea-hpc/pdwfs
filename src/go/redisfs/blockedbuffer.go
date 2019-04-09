@@ -231,12 +231,10 @@ func (b *RedisBlockedBuffer) WriteAt(data []byte, off int64) (int, error) {
 
 //WriteVecAt writes a vector of byte slices starting at byte offset off.
 func (b *RedisBlockedBuffer) WriteVecAt(datav [][]byte, off int64) (int, error) {
-
 	var size int
 	for _, data := range datav {
 		size += len(data)
 	}
-
 	blockInfos := b.relevantBlocks(datav, off, int64(size))
 	return b.writeBlocks(blockInfos)
 }
