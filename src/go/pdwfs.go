@@ -49,11 +49,13 @@ var (
 	errFdInUse          = errors.New("file descriptor already used")
 )
 
-func check(err error) {
+func try(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
+
+var check = try
 
 //PdwFS is a virtual filesystem object built on top of github.com/cea-hpc/pdwfs/redisfs
 type PdwFS struct {
@@ -124,8 +126,7 @@ func (fs *PdwFS) getFileFromFd(fd int) (*redisfs.File, error) {
 
 func (fs *PdwFS) finalize() {
 	for _, mount := range fs.mounts {
-		err := mount.Finalize()
-		check(err)
+		try(mount.Finalize())
 	}
 }
 
@@ -138,8 +139,7 @@ var pdwfs *PdwFS
 func InitPdwfs(mountBuf []byte) {
 	conf := config.New()
 	if dump := os.Getenv("PDWFS_DUMPCONF"); dump != "" {
-		err := conf.Dump()
-		check(err)
+		conf.Dump()
 	}
 	pdwfs = NewPdwFS(conf)
 
@@ -191,8 +191,7 @@ func Open(filename string, flags, mode, fd int) int {
 		}
 		return -1
 	}
-	err = pdwfs.registerFile(fd, &file)
-	check(err)
+	try(pdwfs.registerFile(fd, &file))
 	return fd
 }
 
@@ -226,8 +225,7 @@ func Fopen(filename string, mode string, fd int) int {
 		}
 		return -1
 	}
-	err = pdwfs.registerFile(fd, &file)
-	check(err)
+	try(pdwfs.registerFile(fd, &file))
 	return fd
 }
 
@@ -239,11 +237,8 @@ func Close(fd int) int {
 	file, err := pdwfs.getFileFromFd(fd)
 	check(err)
 
-	err = (*file).Close()
-	check(err) // no known conversion to errno, just panic if err != nil
-
-	err = pdwfs.removeFd(fd)
-	check(err)
+	try((*file).Close()) // no known conversion to errno, just panic if err != nil
+	try(pdwfs.removeFd(fd))
 	return 0
 }
 

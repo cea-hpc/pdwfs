@@ -144,9 +144,7 @@ func (i *Inode) getChildren() ([]*Inode, error) {
 		return nil, ErrNotDirectory
 	}
 	paths, err := i.client.SMembers(i.metaBaseKey + ":children").Result()
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	children := make([]*Inode, 0, len(paths))
 	for _, path := range paths {
 		children = append(children, NewInode(i.mountConf, i.client, path))
@@ -191,8 +189,5 @@ func (i *Inode) remove() {
 			child.remove()
 		}
 	}
-	err := i.delMeta()
-	if err != nil {
-		panic(err)
-	}
+	try(i.delMeta())
 }

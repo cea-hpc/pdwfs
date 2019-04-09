@@ -25,6 +25,14 @@ import (
 	"strings"
 )
 
+func try(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+var check = try
+
 //Mount point configuration
 type Mount struct {
 	Path          string
@@ -49,14 +57,10 @@ type Pdwfs struct {
 
 func validateMountPath(path string) string {
 	path, err := filepath.Abs(path)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	if _, err = os.Stat(path); os.IsExist(err) {
 		entries, err := ioutil.ReadDir(path)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 		if len(entries) != 0 {
 			log.Printf("WARNING mountPath '%s' is not empty, files will not be available for reading through pdwfs", path)
 		}
@@ -111,15 +115,10 @@ func New() *Pdwfs {
 
 	if confFile := os.Getenv("PDWFS_CONF"); confFile != "" {
 		jsonFile, err := os.Open(confFile)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 		defer jsonFile.Close()
 		content, _ := ioutil.ReadAll(jsonFile)
-		err = json.Unmarshal([]byte(content), &conf)
-		if err != nil {
-			panic(err)
-		}
+		try(json.Unmarshal([]byte(content), &conf))
 	}
 
 	// Options verifications and normalization
@@ -146,14 +145,8 @@ func New() *Pdwfs {
 }
 
 // Dump writes the configuration in a JSON file
-func (c *Pdwfs) Dump() error {
+func (c *Pdwfs) Dump() {
 	content, err := json.MarshalIndent(c, "", "    ")
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile("pdwfs.json", content, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
+	check(err)
+	try(ioutil.WriteFile("pdwfs.json", content, 0644))
 }

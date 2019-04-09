@@ -58,9 +58,7 @@ func NewRedisBuffer(conf *config.Mount, client IRedisClient, key string) *RedisB
 // Size returns the length of the Buffer
 func (b *RedisBuffer) Size() int64 {
 	n, err := b.redis.StrLen(b.key).Result()
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	return n
 }
 

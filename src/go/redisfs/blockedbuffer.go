@@ -56,17 +56,11 @@ func NewRedisBlockedBuffer(conf *config.Mount, client IRedisClient, key string) 
 }
 
 func (b *RedisBlockedBuffer) metaAddBlock(id int) {
-	err := b.client.SetBit(b.keyNbBlocks, int64(id), 1).Err()
-	if err != nil {
-		panic(err)
-	}
+	try(b.client.SetBit(b.keyNbBlocks, int64(id), 1).Err())
 }
 
 func (b *RedisBlockedBuffer) metaRemoveBlock(id int) {
-	err := b.client.SetBit(b.keyNbBlocks, int64(id), 0).Err()
-	if err != nil {
-		panic(err)
-	}
+	try(b.client.SetBit(b.keyNbBlocks, int64(id), 0).Err())
 }
 
 //NbBlocks returns the total number of blocks taken
@@ -75,9 +69,7 @@ func (b *RedisBlockedBuffer) NbBlocks() int {
 	if err == redis.Nil {
 		return 0
 	}
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	// get last non-null byte in bitmap
 	i := len(blocksBitmap) - 1
 	for {

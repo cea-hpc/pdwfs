@@ -15,10 +15,7 @@
 package redisfs
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -63,9 +60,7 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 //InitTestRedis returns a new miniredis server and client
 func InitTestRedis() (*miniredis.Miniredis, IRedisClient, *config.Redis) {
 	s, err := miniredis.Run()
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	redisConf := &config.Redis{
 		RedisAddrs: []string{s.Addr()},
 		UseUnlink:  false, // miniredis does not support Unlink, defaults to Del
@@ -76,21 +71,13 @@ func InitTestRedis() (*miniredis.Miniredis, IRedisClient, *config.Redis) {
 //GetMountPathConf returns a default configuration (for testing)
 func GetMountPathConf() *config.Mount {
 	cwd, err := filepath.Abs(".")
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	return &config.Mount{
 		Path:          cwd,
 		BlockSize:     1024 * 1024, // 1Mo
 		WriteParallel: true,
 		ReadParallel:  true,
 	}
-}
-
-//Log ...
-func Log(data ...interface{}) {
-	fmt.Printf("\033[35m[PDWFS][LOGS]\033[39m[Go][MPI_RANK %s]", os.Getenv("PMIX_RANK"))
-	fmt.Println(data...)
 }
 
 // SplitPath splits the given path in segments:
@@ -117,10 +104,10 @@ func SplitPath(path string, sep string) []string {
 	return parts
 }
 
-func randomToken() (string, error) {
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
+func try(err error) {
+	if err != nil {
+		panic(err)
 	}
-	return base64.URLEncoding.EncodeToString(buf), nil
 }
+
+var check = try
