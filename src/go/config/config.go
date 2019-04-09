@@ -35,10 +35,8 @@ var check = try
 
 //Mount point configuration
 type Mount struct {
-	Path          string
-	BlockSize     int
-	WriteParallel bool
-	ReadParallel  bool
+	Path      string
+	BlockSize int
 }
 
 //Redis connection configuration
@@ -96,10 +94,8 @@ func New() *Pdwfs {
 
 	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
 		conf.Mounts[path] = &Mount{
-			Path:          path,
-			BlockSize:     10 * 1024 * 1024, // 10MB
-			WriteParallel: true,
-			ReadParallel:  true,
+			Path:      path,
+			BlockSize: 10 * 1024 * 1024, // 10MB
 		}
 	}
 

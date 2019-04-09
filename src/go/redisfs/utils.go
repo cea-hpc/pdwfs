@@ -73,10 +73,8 @@ func GetMountPathConf() *config.Mount {
 	cwd, err := filepath.Abs(".")
 	check(err)
 	return &config.Mount{
-		Path:          cwd,
-		BlockSize:     1024 * 1024, // 1Mo
-		WriteParallel: true,
-		ReadParallel:  true,
+		Path:      cwd,
+		BlockSize: 1024 * 1024, // 1Mo
 	}
 }
 

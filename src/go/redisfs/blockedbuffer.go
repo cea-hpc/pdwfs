@@ -201,7 +201,7 @@ type chanReturnData struct {
 	err error
 }
 
-func (b *RedisBlockedBuffer) writeBlocksParallel(blockInfos []blockInfo) (int, error) {
+func (b *RedisBlockedBuffer) writeBlocks(blockInfos []blockInfo) (int, error) {
 
 	retChan := make(chan chanReturnData)
 	for _, blockInfo := range blockInfos {
@@ -223,26 +223,10 @@ func (b *RedisBlockedBuffer) writeBlocksParallel(blockInfos []blockInfo) (int, e
 	return n, err
 }
 
-func (b *RedisBlockedBuffer) writeBlocksSequential(blockInfos []blockInfo) (int, error) {
-
-	var n int
-	for _, blockInfo := range blockInfos {
-		wrote, err := blockInfo.buf.WriteVecAt(blockInfo.data, blockInfo.off)
-		n += wrote
-		if err != nil {
-			return n, err
-		}
-	}
-	return n, nil
-}
-
 //WriteAt writes a byte slices starting at byte offset off.
 func (b *RedisBlockedBuffer) WriteAt(data []byte, off int64) (int, error) {
 	blockInfos := b.relevantBlocks([][]byte{data}, off, int64(len(data)))
-	if b.conf.WriteParallel {
-		return b.writeBlocksParallel(blockInfos)
-	}
-	return b.writeBlocksSequential(blockInfos)
+	return b.writeBlocks(blockInfos)
 }
 
 //WriteVecAt writes a vector of byte slices starting at byte offset off.
@@ -254,13 +238,10 @@ func (b *RedisBlockedBuffer) WriteVecAt(datav [][]byte, off int64) (int, error) 
 	}
 
 	blockInfos := b.relevantBlocks(datav, off, int64(size))
-	if b.conf.WriteParallel {
-		return b.writeBlocksParallel(blockInfos)
-	}
-	return b.writeBlocksSequential(blockInfos)
+	return b.writeBlocks(blockInfos)
 }
 
-func (b *RedisBlockedBuffer) readBlocksParallel(blockInfos []blockInfo) (int, error) {
+func (b *RedisBlockedBuffer) readBlocks(blockInfos []blockInfo) (int, error) {
 
 	retChan := make(chan chanReturnData)
 	for _, blockInfo := range blockInfos {
@@ -282,25 +263,10 @@ func (b *RedisBlockedBuffer) readBlocksParallel(blockInfos []blockInfo) (int, er
 	return n, err
 }
 
-func (b *RedisBlockedBuffer) readBlocksSequential(blockInfos []blockInfo) (int, error) {
-	var n int
-	for _, blockInfo := range blockInfos {
-		read, err := blockInfo.buf.ReadVecAt(blockInfo.data, blockInfo.off)
-		n += read
-		if err != nil {
-			return n, err
-		}
-	}
-	return n, nil
-}
-
 //ReadAt reads a vector of byte slices starting at byte offset off
 func (b *RedisBlockedBuffer) ReadAt(data []byte, off int64) (int, error) {
 	blockInfos := b.relevantBlocks([][]byte{data}, off, int64(len(data)))
-	if b.conf.ReadParallel {
-		return b.readBlocksParallel(blockInfos)
-	}
-	return b.readBlocksSequential(blockInfos)
+	return b.readBlocks(blockInfos)
 }
 
 //ReadVecAt reads a vector of byte slices from the Buffer starting at byte offset off
@@ -310,10 +276,7 @@ func (b *RedisBlockedBuffer) ReadVecAt(datav [][]byte, off int64) (int, error) {
 		size += len(data)
 	}
 	blockInfos := b.relevantBlocks(datav, off, int64(size))
-	if b.conf.ReadParallel {
-		return b.readBlocksParallel(blockInfos)
-	}
-	return b.readBlocksSequential(blockInfos)
+	return b.readBlocks(blockInfos)
 }
 
 // Resize resizes the Buffer to a given size.
