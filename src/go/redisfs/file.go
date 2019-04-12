@@ -16,6 +16,7 @@ package redisfs
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -24,6 +25,8 @@ import (
 var (
 	// ErrNegativeOffset is returned if the offset is negative.
 	ErrNegativeOffset = errors.New("Negative offset")
+	// ErrNegativeTruncateSize is returned if the truncating size is negative.
+	ErrNegativeTruncateSize = errors.New("Negative truncate size")
 	// ErrInvalidSeekWhence is returned if the whence argument of a seek is not a proper value.
 	ErrInvalidSeekWhence = errors.New("Seek whence is not a proper value")
 	// ErrNegativeSeekLocation is returned if the seek location is negative.
@@ -32,7 +35,7 @@ var (
 
 // MemFile represents a file backed by a Store which is secured from concurrent access.
 type MemFile struct {
-	buf    Buffer
+	client *FileContentClient
 	path   string
 	offset int64
 	mtx    *sync.RWMutex
@@ -40,11 +43,11 @@ type MemFile struct {
 
 // NewMemFile creates a file which byte slice is safe from concurrent access,
 // the file itself is not thread-safe.
-func NewMemFile(buf Buffer, path string, mtx *sync.RWMutex) *MemFile {
+func NewMemFile(client *FileContentClient, path string, mtx *sync.RWMutex) *MemFile {
 	return &MemFile{
-		buf:  buf,
-		path: path,
-		mtx:  mtx,
+		client: client,
+		path:   path,
+		mtx:    mtx,
 	}
 }
 
@@ -55,7 +58,7 @@ func (f MemFile) Name() string {
 
 // Size of file
 func (f MemFile) Size() int64 {
-	return f.buf.Size()
+	return f.client.GetSize(f.path)
 }
 
 // Sync has no effect
@@ -65,9 +68,13 @@ func (f MemFile) Sync() error {
 
 // Truncate changes the size of the file
 func (f MemFile) Truncate(size int64) error {
+	if size < 0 {
+		return ErrNegativeTruncateSize
+	}
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
-	return f.buf.Resize(size)
+	f.client.Resize(f.path, size)
+	return nil
 }
 
 // Close the file (no op)
@@ -77,20 +84,17 @@ func (f MemFile) Close() error {
 
 func (f MemFile) readAt(dst []byte, off int64) (int, error) {
 	if off < 0 {
-		return 0, ErrNegativeOffset
+		panic(ErrNegativeOffset)
 	}
-
-	read, err := f.buf.ReadAt(dst, off)
-	if err != nil {
-		if err == ErrEndOfBuffer {
-			return read, io.EOF
-		}
-		return read, err
+	data, ok := f.client.ReadAt(f.path, off, int64(len(dst)))
+	if !ok {
+		panic(fmt.Errorf("reading empty file %s", f.path))
 	}
-	if read < len(dst) {
-		return read, io.EOF
+	n := copy(dst, data)
+	if n < len(dst) {
+		return n, io.EOF
 	}
-	return read, nil
+	return n, nil
 }
 
 // Read reads len(dst) byte starting at the current offset.
@@ -110,25 +114,19 @@ func (f MemFile) ReadAt(dst []byte, off int64) (int, error) {
 }
 
 func (f MemFile) readVecAt(dstv [][]byte, off int64) (int, error) {
-	if off < 0 {
-		return 0, ErrNegativeOffset
-	}
-
-	var size int
+	var n int
 	for _, dst := range dstv {
-		size += len(dst)
-	}
-	read, err := f.buf.ReadVecAt(dstv, off)
-	if err != nil {
-		if err == ErrEndOfBuffer {
-			return read, io.EOF
+		read, err := f.readAt(dst, off)
+		n += read
+		if err != nil {
+			if err == io.EOF {
+				return n, io.EOF
+			}
+			panic(err)
 		}
-		return read, err
+		off += int64(read)
 	}
-	if read < size {
-		return read, io.EOF
-	}
-	return read, nil
+	return n, nil
 }
 
 // ReadVec reads a vector of byte slices starting at the current offset.
@@ -149,9 +147,10 @@ func (f MemFile) ReadVecAt(dstv [][]byte, off int64) (int, error) {
 
 func (f MemFile) writeAt(data []byte, off int64) (int, error) {
 	if off < 0 {
-		return 0, ErrNegativeOffset
+		panic(ErrNegativeOffset)
 	}
-	return f.buf.WriteAt(data, off)
+	f.client.WriteAt(f.path, off, data)
+	return len(data), nil
 }
 
 // Write writes len(data) byte starting at the current offset
@@ -171,10 +170,13 @@ func (f MemFile) WriteAt(data []byte, off int64) (int, error) {
 }
 
 func (f MemFile) writeVecAt(datav [][]byte, off int64) (int, error) {
-	if off < 0 {
-		return 0, ErrNegativeOffset
+	var n int
+	for _, data := range datav {
+		wrote, _ := f.writeAt(data, off)
+		off += int64(wrote)
+		n += wrote
 	}
-	return f.buf.WriteVecAt(datav, off)
+	return n, nil
 }
 
 // WriteVec writes a vector of byte slices starting at the current offset

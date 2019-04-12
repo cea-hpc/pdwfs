@@ -67,37 +67,36 @@ const PathSeparator = "/"
 
 // RedisFS is a in-memory filesystem
 type RedisFS struct {
-	mountConf *config.Mount
-	client    IRedisClient
-	inodes    map[string]*Inode
-	root      *Inode
+	mountConf  *config.Mount
+	dataClient *FileContentClient
+	metaClient IRedisClient
+	inodes     map[string]*Inode
+	root       *Inode
 }
 
 // NewRedisFS a new RedisFS filesystem which entirely resides in memory
 func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
-	client := NewRedisClient(redisConf)
+	dataClient := NewFileContentClient(redisConf, int64(mountConf.StripeSize))
+	metaClient := NewRedisClient(redisConf)
 
 	// create root inode
 	//FIXME: mount path (root) should only be created it it exists on the FS at startup
-	root := NewInode(mountConf, client, mountConf.Path)
-	try(root.initMeta(true, 0600))
+	root := NewInode(mountConf, dataClient, metaClient, mountConf.Path)
+	Try(root.initMeta(true, 0600))
 
 	return &RedisFS{
-		mountConf: mountConf,
-		inodes:    map[string]*Inode{root.Path(): root},
-		client:    client,
-		root:      root,
+		mountConf:  mountConf,
+		metaClient: metaClient,
+		dataClient: dataClient,
+		inodes:     map[string]*Inode{root.Path(): root},
+		root:       root,
 	}
 }
 
 // Finalize performs close up actions on the virtual file system
-func (fs *RedisFS) Finalize() error {
-	return fs.client.Close()
-}
-
-// GetClient returns the Redis client
-func (fs *RedisFS) GetClient() IRedisClient {
-	return fs.client
+func (fs *RedisFS) Finalize() {
+	fs.metaClient.Close()
+	fs.dataClient.Close()
 }
 
 // ValidatePath ensures path belongs to a filesystem tree catched by pdwfs
@@ -113,8 +112,8 @@ func (fs *RedisFS) ValidatePath(path string) error {
 }
 
 func (fs *RedisFS) createInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
-	i := NewInode(fs.mountConf, fs.client, path)
-	try(i.initMeta(dir, mode))
+	i := NewInode(fs.mountConf, fs.dataClient, fs.metaClient, path)
+	Try(i.initMeta(dir, mode))
 	parent.setChild(i)
 	fs.inodes[i.Path()] = i
 	return i
@@ -124,7 +123,7 @@ func (fs *RedisFS) getInode(path string) (*Inode, bool) {
 	if i, ok := fs.inodes[path]; ok {
 		return i, true
 	}
-	i := NewInode(fs.mountConf, fs.client, path)
+	i := NewInode(fs.mountConf, fs.dataClient, fs.metaClient, path)
 	if ok, _ := i.exists(); !ok {
 		return nil, false
 	}
@@ -156,7 +155,7 @@ func (fs *RedisFS) Mkdir(name string, perm os.FileMode) error {
 		return &os.PathError{Op: "mkdir", Path: name, Err: err}
 	}
 	path, err := filepath.Abs(name)
-	check(err)
+	Check(err)
 	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return &os.PathError{Op: "mkdir", Path: name, Err: err}
@@ -192,7 +191,7 @@ func (fs *RedisFS) ReadDir(path string) ([]os.FileInfo, error) {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: err}
 	}
 	path, err := filepath.Abs(path)
-	check(err)
+	Check(err)
 	_, fi, err := fs.fileInfo(path)
 	if err != nil {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: err}
@@ -241,7 +240,7 @@ func (fs *RedisFS) OpenFile(name string, flag int, perm os.FileMode) (File, erro
 		return nil, &os.PathError{Op: "open", Path: name, Err: err}
 	}
 	path, err := filepath.Abs(name)
-	check(err)
+	Check(err)
 	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return nil, &os.PathError{Op: "open", Path: name, Err: err}
@@ -290,7 +289,7 @@ func (fs *RedisFS) Remove(name string) error {
 		return &os.PathError{Op: "remove", Path: name, Err: err}
 	}
 	path, err := filepath.Abs(name)
-	check(err)
+	Check(err)
 	fiParent, fiNode, err := fs.fileInfo(path)
 	if err != nil {
 		return &os.PathError{Op: "remove", Path: name, Err: err}
@@ -310,7 +309,7 @@ func (fs *RedisFS) Stat(name string) (os.FileInfo, error) {
 		return nil, &os.PathError{Op: "stat", Path: name, Err: err}
 	}
 	path, err := filepath.Abs(name)
-	check(err)
+	Check(err)
 	_, fi, err := fs.fileInfo(path)
 	if err != nil {
 		return nil, &os.PathError{Op: "stat", Path: name, Err: err}

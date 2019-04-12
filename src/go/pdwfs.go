@@ -73,7 +73,7 @@ func NewPdwFS(conf *config.Pdwfs) *PdwFS {
 	}
 	mounts := map[string]*redisfs.RedisFS{}
 	for path, mountConf := range conf.Mounts {
-		mounts[path] = redisfs.NewRedisFS(conf.RedisConf, mountConf)
+		mounts[path] = redisfs.NewRedisFS(conf.Redis, mountConf)
 	}
 	return &PdwFS{
 		mounts:    mounts,
@@ -126,7 +126,7 @@ func (fs *PdwFS) getFileFromFd(fd int) (*redisfs.File, error) {
 
 func (fs *PdwFS) finalize() {
 	for _, mount := range fs.mounts {
-		try(mount.Finalize())
+		mount.Finalize()
 	}
 }
 
@@ -251,6 +251,7 @@ func Write(fd int, buf []byte) int {
 	check(err)
 
 	n, err := (*file).Write(buf)
+
 	check(err) // no known conversion to errno, just panic if err != nil
 	return n
 }

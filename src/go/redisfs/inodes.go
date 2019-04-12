@@ -15,52 +15,50 @@
 package redisfs
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/go-redis/redis"
 )
 
 //Inode object
 type Inode struct {
 	mountConf   *config.Mount
-	client      IRedisClient
+	dataClient  *FileContentClient
+	metaClient  IRedisClient
 	path        string
-	redisBuf    *RedisBlockedBuffer
-	mtx         *sync.RWMutex
 	metaBaseKey string
 	isDir       *bool
 	mode        *os.FileMode
+	mtx         *sync.RWMutex
 }
 
 //NewInode ...
-func NewInode(mountConf *config.Mount, client IRedisClient, path string) *Inode {
+func NewInode(mountConf *config.Mount, dataClient *FileContentClient, metaClient IRedisClient, path string) *Inode {
 	return &Inode{
 		mountConf:   mountConf,
-		client:      client,
+		dataClient:  dataClient,
+		metaClient:  metaClient,
 		path:        path,
 		mtx:         &sync.RWMutex{},
 		metaBaseKey: "{" + path + "}", // hastag to ensure all metadata keys goes on the same instance
 	}
 }
-func (i *Inode) getBuffer() *RedisBlockedBuffer {
-	if i.redisBuf == nil && !i.IsDir() {
-		i.redisBuf = NewRedisBlockedBuffer(i.mountConf, i.client, i.Path())
-	}
-	return i.redisBuf
-}
+
 func (i *Inode) exists() (bool, error) {
 	if i.mode != nil {
 		return true, nil
 	}
-	ret, err := i.client.Exists(i.metaBaseKey + ":mode").Result()
+	ret, err := i.metaClient.Exists(i.metaBaseKey + ":mode").Result()
 	return ret != 0, err
 }
 
 func (i *Inode) initMeta(isDir bool, mode os.FileMode) error {
-	pipeline := i.client.Pipeline()
+	pipeline := i.metaClient.Pipeline()
 	pipeline.SetNX(i.metaBaseKey+":isDir", isDir, 0)
 	pipeline.SetNX(i.metaBaseKey+":mode", uint32(mode), 0)
 	_, err := pipeline.Exec()
@@ -68,7 +66,7 @@ func (i *Inode) initMeta(isDir bool, mode os.FileMode) error {
 }
 
 func (i *Inode) delMeta() error {
-	pipeline := i.client.Pipeline()
+	pipeline := i.metaClient.Pipeline()
 	pipeline.Del(i.metaBaseKey + ":children")
 	pipeline.Del(i.metaBaseKey + ":isDir")
 	pipeline.Del(i.metaBaseKey + ":mode")
@@ -80,8 +78,11 @@ func (i *Inode) delMeta() error {
 func (i *Inode) IsDir() bool {
 	if i.isDir == nil {
 		key := i.metaBaseKey + ":isDir"
-		res, err := i.client.Get(key).Result()
-		checkKeyExists(err, key)
+		res, err := i.metaClient.Get(key).Result()
+		if err != nil && err == redis.Nil {
+			panic(fmt.Errorf("key '%s' not found", key))
+		}
+		Check(err)
 		isDir := res == "1"
 		i.isDir = &isDir
 	}
@@ -92,10 +93,13 @@ func (i *Inode) IsDir() bool {
 func (i *Inode) Mode() os.FileMode {
 	if i.mode == nil {
 		key := i.metaBaseKey + ":mode"
-		val, err := i.client.Get(key).Result()
-		checkKeyExists(err, key)
+		val, err := i.metaClient.Get(key).Result()
+		if err != nil && err == redis.Nil {
+			panic(fmt.Errorf("key '%s' not found", key))
+		}
+		Check(err)
 		res, err := strconv.Atoi(val)
-		check(err)
+		Check(err)
 		m := os.FileMode(res)
 		i.mode = &m
 	}
@@ -127,30 +131,30 @@ func (i *Inode) Size() int64 {
 	if i.IsDir() {
 		return 0
 	}
-	return i.getBuffer().Size()
+	return i.dataClient.GetSize(i.path)
 }
 
 func (i *Inode) childrenPath() []string {
-	return i.client.SMembers(i.metaBaseKey + ":children").Val()
+	return i.metaClient.SMembers(i.metaBaseKey + ":children").Val()
 }
 
 func (i *Inode) setChild(child *Inode) error {
-	return i.client.SAdd(i.metaBaseKey+":children", child.Path()).Err()
+	return i.metaClient.SAdd(i.metaBaseKey+":children", child.Path()).Err()
 }
 
 func (i *Inode) removeChild(child *Inode) error {
-	return i.client.SRem(i.metaBaseKey+":children", child.Path()).Err()
+	return i.metaClient.SRem(i.metaBaseKey+":children", child.Path()).Err()
 }
 
 func (i *Inode) getChildren() ([]*Inode, error) {
 	if !i.IsDir() {
 		return nil, ErrNotDirectory
 	}
-	paths, err := i.client.SMembers(i.metaBaseKey + ":children").Result()
-	check(err)
+	paths, err := i.metaClient.SMembers(i.metaBaseKey + ":children").Result()
+	Check(err)
 	children := make([]*Inode, 0, len(paths))
 	for _, path := range paths {
-		children = append(children, NewInode(i.mountConf, i.client, path))
+		children = append(children, NewInode(i.mountConf, i.dataClient, i.metaClient, path))
 	}
 	return children, nil
 }
@@ -159,13 +163,12 @@ func (i *Inode) getFile(flag int) (File, error) {
 	if i.IsDir() {
 		return nil, ErrIsDirectory
 	}
-	inodeBuf := i.getBuffer()
 
 	if hasFlag(os.O_TRUNC, flag) {
-		inodeBuf.Clear()
+		i.dataClient.Remove(i.path)
 	}
 
-	var f File = NewMemFile(inodeBuf, i.Path(), i.mtx)
+	var f File = NewMemFile(i.dataClient, i.path, i.mtx)
 
 	if hasFlag(os.O_APPEND, flag) {
 		f.Seek(0, os.SEEK_END)
@@ -184,13 +187,14 @@ func (i *Inode) getFile(flag int) (File, error) {
 }
 
 func (i *Inode) remove() {
-	if buf := i.getBuffer(); buf != nil {
-		buf.Clear()
-	}
-	if children, _ := i.getChildren(); children != nil {
-		for _, child := range children {
-			child.remove()
+	if !i.IsDir() {
+		i.dataClient.Remove(i.path)
+	} else {
+		if children, _ := i.getChildren(); children != nil {
+			for _, child := range children {
+				child.remove()
+			}
 		}
 	}
-	try(i.delMeta())
+	Try(i.delMeta())
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package redisfs
+package util
 
 import (
 	"fmt"
@@ -57,24 +57,23 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 	}
 }
 
-//InitTestRedis returns a new miniredis server and client
-func InitTestRedis() (*miniredis.Miniredis, IRedisClient, *config.Redis) {
-	s, err := miniredis.Run()
-	check(err)
-	redisConf := &config.Redis{
-		RedisAddrs: []string{s.Addr()},
-		UseUnlink:  false, // miniredis does not support Unlink, defaults to Del
-	}
-	return s, NewRedisClient(redisConf), redisConf
+//InitMiniRedis returns a new miniredis server
+func InitMiniRedis() (*miniredis.Miniredis, *config.Redis) {
+	server, err := miniredis.Run()
+	Check(err)
+	conf := config.NewRedisConf()
+	conf.Addrs = []string{server.Addr()}
+	conf.UseUnlink = false // miniredis does not support Unlink, defaults to Del
+	return server, conf
 }
 
 //GetMountPathConf returns a default configuration (for testing)
 func GetMountPathConf() *config.Mount {
 	cwd, err := filepath.Abs(".")
-	check(err)
+	Check(err)
 	return &config.Mount{
-		Path:      cwd,
-		BlockSize: 1024 * 1024, // 1Mo
+		Path:       cwd,
+		StripeSize: config.DefaultStripeSize,
 	}
 }
 
@@ -102,10 +101,12 @@ func SplitPath(path string, sep string) []string {
 	return parts
 }
 
-func try(err error) {
+// Try ...
+func Try(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-var check = try
+// Check is an alias for Try
+var Check = Try

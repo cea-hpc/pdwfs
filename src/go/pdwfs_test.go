@@ -15,35 +15,13 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"reflect"
-	"runtime"
 	"testing"
 
-	"github.com/alicebob/miniredis"
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/cea-hpc/pdwfs/util"
 )
-
-// Ok fails the test if an err is not nil.
-func Ok(tb testing.TB, err error) {
-	if err != nil {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: unexpected error: %s\033[39m\n\n", filepath.Base(file), line, err.Error())
-		tb.FailNow()
-	}
-}
-
-// Equals fails the test if exp is not equal to act.
-func Equals(tb testing.TB, exp, act interface{}, msg string) {
-	if !reflect.DeepEqual(exp, act) {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: %s\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, msg, exp, act)
-		tb.FailNow()
-	}
-}
 
 func writeFile(pdwfs *PdwFS, filename string, data []byte, perm os.FileMode) (int, error) {
 	mount, err := pdwfs.getMount(filename)
@@ -71,36 +49,34 @@ func readFile(pdwfs *PdwFS, filename string) ([]byte, error) {
 
 func TestMultiMount(t *testing.T) {
 
-	s, err := miniredis.Run()
-	Ok(t, err)
-	defer s.Close()
+	server, redisConf := util.InitMiniRedis()
+	defer server.Close()
 
 	conf := config.New()
-	conf.RedisConf.RedisAddrs = []string{s.Addr()}
+	conf.Redis = redisConf
 
 	// create two fake mount paths
 	conf.Mounts["/rebels/luke"] = &config.Mount{
-		Path:      "/rebels/luke",
-		BlockSize: 2 * 1024, // 2KB
+		Path:       "/rebels/luke",
+		StripeSize: 2 * 1024, // 2KB
 	}
 	conf.Mounts["/empire/vader"] = &config.Mount{
-		Path:      "/empire/vader",
-		BlockSize: 1024, // 1KB
+		Path:       "/empire/vader",
+		StripeSize: 1024, // 1KB
 	}
 	pdwfs := NewPdwFS(conf)
-	defer pdwfs.mounts["/rebels/luke"].GetClient().FlushAll()
-	defer pdwfs.mounts["/empire/vader"].GetClient().FlushAll()
+	defer pdwfs.finalize()
 
-	_, err = writeFile(pdwfs, "/rebels/luke/quotes", []byte("Vader's on that ship.\n"), os.FileMode(0777))
-	Ok(t, err)
+	_, err := writeFile(pdwfs, "/rebels/luke/quotes", []byte("Vader's on that ship.\n"), os.FileMode(0777))
+	util.Ok(t, err)
 
 	_, err = writeFile(pdwfs, "/empire/vader/quotes", []byte("The Force is strong with this one.\n"), os.FileMode(0777))
-	Ok(t, err)
+	util.Ok(t, err)
 
 	data, err := readFile(pdwfs, "/rebels/luke/quotes")
-	Equals(t, "Vader's on that ship.\n", string(data), "Bad quote !")
+	util.Equals(t, "Vader's on that ship.\n", string(data), "Bad quote !")
 
 	data, err = readFile(pdwfs, "/empire/vader/quotes")
-	Equals(t, "The Force is strong with this one.\n", string(data), "Bad quote !")
+	util.Equals(t, "The Force is strong with this one.\n", string(data), "Bad quote !")
 
 }
