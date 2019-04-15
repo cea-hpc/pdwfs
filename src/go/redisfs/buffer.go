@@ -70,7 +70,12 @@ func string2byteNoCopy(s string) []byte {
 
 //WriteAt writes data to the Buffer starting at byte offset off.
 func (b *RedisBuffer) WriteAt(data []byte, off int64) (int, error) {
-	try(b.redis.SetRange(b.key, off, byte2StringNoCopy(data)).Err())
+	if off == 0 && len(data) == b.bufSize {
+		// if the whole buffer is to be written, Set is faster than SetRange
+		try(b.redis.Set(b.key, byte2StringNoCopy(data), 0).Err())
+	} else {
+		try(b.redis.SetRange(b.key, off, byte2StringNoCopy(data)).Err())
+	}
 	return len(data), nil
 }
 
@@ -78,9 +83,9 @@ func (b *RedisBuffer) WriteAt(data []byte, off int64) (int, error) {
 func (b *RedisBuffer) WriteVecAt(datav [][]byte, off int64) (int, error) {
 	var n int
 	for _, data := range datav {
-		try(b.redis.SetRange(b.key, off, byte2StringNoCopy(data)).Err())
-		off += int64(len(data))
-		n += len(data)
+		l, _ := b.WriteAt(data, off)
+		off += int64(l)
+		n += l
 	}
 	return n, nil
 }
