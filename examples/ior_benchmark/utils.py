@@ -49,6 +49,8 @@ def plot_results(df_disk, df_pdwfs, title=None, filename=None):
     """
     Plot max write rate vs transfer size
     """
+    plt.style.use("ggplot")
+
     plt.xlabel("Transfer Size (MiB)")
     plt.ylabel("Measured Write Rate (MiB/s)")
     prefix = "IOR Write Rate Test Results"
