@@ -225,7 +225,9 @@ int close(int fd) {
     if FD_NOT_MANAGED(fd) {
         return libc_close(fd);
     }
-    return Close(fd);
+    int ret = Close(fd);
+    remove_fd(fd_register, fd);
+    return ret;
 }
 
 ssize_t write(int fd, const void *buf, size_t count) {
