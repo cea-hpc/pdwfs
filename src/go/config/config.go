@@ -100,6 +100,14 @@ func New() *Pdwfs {
 		Redis:  defaultRedis,
 	}
 
+	if confFile := os.Getenv("PDWFS_CONF"); confFile != "" {
+		jsonFile, err := os.Open(confFile)
+		check(err)
+		defer jsonFile.Close()
+		content, _ := ioutil.ReadAll(jsonFile)
+		try(json.Unmarshal([]byte(content), &conf))
+	}
+
 	if addrs := os.Getenv("PDWFS_REDIS"); addrs != "" {
 		s := strings.Split(addrs, ",")
 		var a []string
@@ -126,14 +134,6 @@ func New() *Pdwfs {
 			}
 			mount.StripeSize = size * 1024 * 1024
 		}
-	}
-
-	if confFile := os.Getenv("PDWFS_CONF"); confFile != "" {
-		jsonFile, err := os.Open(confFile)
-		check(err)
-		defer jsonFile.Close()
-		content, _ := ioutil.ReadAll(jsonFile)
-		try(json.Unmarshal([]byte(content), &conf))
 	}
 
 	// Options verifications and normalization
