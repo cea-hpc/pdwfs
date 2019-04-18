@@ -1,0 +1,225 @@
+#!/bin/bash
+
+# Copyright 2019 CEA
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# 
+# Manage a pdwfs session using SLURM to launch Redis instances on compute nodes
+
+
+# Helpers and constants
+
+SESSION_FILE=pdwfs.session
+
+cleanup_session() {
+	if [ -f $SESSION_FILE ]; then
+		source $SESSION_FILE
+		redis-cli -u redis://$PDWFS_CENTRAL_REDIS shutdown &> /dev/null
+	fi
+}
+
+fail() {
+	msg=$1
+	if [[ -n "$msg" ]]; then
+		echo "$msg"
+	fi
+	cleanup_session
+	echo "export PDWFS_STATUS=FAILED" > $SESSION_FILE
+	exit 1
+}
+
+
+##############################################
+#          pdwfs-slurm command               #
+##############################################
+
+usage="Usage: $(basename "$0") [-h] COMMAND
+
+Initialize and manage a pdwfs session using SLURM to launch Redis instances
+on compute nodes.
+
+where:
+	-h     	show this help
+	COMMAND [init|finalize] a pdwfs session"
+
+while getopts ':h' opt; do
+    case "$opt" in
+    h)  echo "$usage"
+        exit
+        ;;
+    :)  printf "Error: missing argument for -%s\n" "$OPTARG"
+        fail "$usage"
+        ;;
+    \?) printf "Error: illegal option: -%s\n" "$OPTARG"
+        fail "$usage"
+        ;;
+    esac
+done
+shift "$((OPTIND - 1))"
+
+command=$1
+if [[ -z "$command" ]]; then
+	echo "Error: no command specified"
+	fail "$usage"
+fi
+shift
+
+
+
+
+##############################################
+#             init command                  #
+##############################################
+
+if [ "$command" == init ]; then
+
+	usage_init="Usage: $(basename "$0") init [-hNip]
+
+	Initialize a new pdwfs session by launching multiple Redis instances
+	on compute nodes and creating a session environment file to be sourced.
+
+	This command must be executed after pdwfs-slurm init:
+	$ source pdwfs.session
+
+	where:
+		-h	show this help
+		-N	number of nodes (default: 1)
+		-i	number of Redis instances per node (default: 1)
+		-p	port of central Redis instance (default: 6379)"
+
+	while getopts ':hN:i:p:' opt; do
+		case "$opt" in
+		h)  echo "$usage_init"
+			exit
+			;;
+		N)  nNodes=$OPTARG
+			;;
+		i)	nInstances=$OPTARG
+			;;
+		p)	port=$OPTARG
+			;;
+		:)  printf "Error: missing argument for -%s\n" "$OPTARG"
+			fail "$usage_init"
+			;;
+		\?) printf "Error: illegal option: -%s\n" "$OPTARG"
+			fail "$usage_init"
+			;;
+		esac
+	done
+	shift "$((OPTIND - 1))"
+
+	# normalize options
+	if [[ -z "$nNodes" ]]; then nNodes=1; fi
+	if [[ -z "$nInstances" ]]; then nInstances=1; fi
+	if [[ -z "$port" ]]; then port=6379; fi
+
+	# cleanup previous session if any
+	cleanup_session
+	rm -f $SESSION_FILE
+	
+	# start central Redis instance to help managing remote instances
+	echo "[PDWFS][init] Start central Redis instance on `hostname`:$port"
+	redis-server --port $port --daemonize yes --save "" --protected-mode no > /dev/null
+	if [[ "$?" != "0" ]]; then
+		fail "[PDWFS][init] Error: failed to start the central Redis instance"
+	fi
+	CENTRAL_REDIS=`hostname`:$port
+	
+	# test central instance is up
+	if ! redis-cli -u redis://$CENTRAL_REDIS ping > /dev/null; then 
+		fail "[PDWFS][init] Error: the central Redis instance is not responding"
+	fi
+
+	# launch the remote instances
+	srun -N $nNodes -n $nNodes -c $nInstances --exclusive --mem=0 redis.srun -i $nInstances $CENTRAL_REDIS &
+	if [[ "$?" != "0" ]]; then
+		fail "[PDWFS][init] Error: failed to launch the remote Redis instances"
+	fi
+
+	# wait till all instances are up
+	totalInstances=$(($nNodes*$nInstances))
+	for i in $(seq 1 $totalInstances); do
+		echo `redis-cli -u redis://$CENTRAL_REDIS blpop waitkey 0`
+	done | pv -N "[PDWFS][init] Launch Redis instances ($totalInstances)" -p -l -s $totalInstances -i 0.2 > /dev/null
+
+	# create session environment file
+	cat > $SESSION_FILE << EOF
+export PDWFS_CENTRAL_REDIS=$CENTRAL_REDIS
+export PDWFS_REDIS=`redis-cli -u redis://$PDWFS_CENTRAL_REDIS smembers addr | tr -s '[:space:]' ','`
+export PDWFS_TOTAL_INSTANCES=$totalInstances
+EOF
+	
+
+
+##############################################
+#             finalize command               #
+##############################################
+
+elif [ "$command" == finalize ]; then
+
+	usage_finalize="Usage: $(basename "$0") finalize [-h]
+
+	Finalize pdwfs session by stopping Redis instances on compute nodes.
+
+	where:
+		-h	show this help"
+
+	while getopts ':h' opt; do
+		case "$opt" in
+		h)  echo "$usage_finalize"
+			exit
+			;;
+		:)  printf "Error: missing argument for -%s\n" "$OPTARG"
+			fail "$usage_finalize"
+			;;
+		\?) printf "Error: illegal option: -%s\n" "$OPTARG"
+			fail "$usage_finalize"
+			;;
+		esac
+	done
+	shift "$((OPTIND - 1))"
+
+	# source session environment file
+	if ! source $SESSION_FILE; then
+		fail "[PDWFS][finalize] Error: session env file $SESSION_FILE not found"
+	fi
+	
+	# check status of init command
+	if [ "$PDWFS_STATUS" == "FAILED" ]; then
+		fail "[PDWFS][finalize] Error: pdwfs-slurm init command failed"
+	fi
+
+	# test central instance is up
+	if ! redis-cli -u redis://$PDWFS_CENTRAL_REDIS ping > /dev/null; then 
+		fail "[PDWFS][finalize] Error: central Redis instance is not responding"
+	fi
+
+	# send stop signal
+	redis-cli -u redis://$PDWFS_CENTRAL_REDIS rpush order stop > /dev/null
+	
+	# wait till all instances are down
+	totalInstances=$PDWFS_TOTAL_INSTANCES
+	for i in $(seq 1 $totalInstances); do
+		echo `redis-cli -u redis://$PDWFS_CENTRAL_REDIS blpop waitkey 0`
+	done | pv -N "[PDWFS][finalize] Stop Redis instances ($totalInstances) " -p -l -s $totalInstances -i 0.2 > /dev/null
+	
+	cleanup_session
+
+
+else
+	echo "Error: wrong command specified"
+	fail "$usage"
+fi
+
+

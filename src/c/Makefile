@@ -3,7 +3,6 @@ LDFLAGS =
 LIBS = $(shell pkg-config --libs glib-2.0)
 
 BUILDDIR=../../build
-SCRIPTSDIR=../../scripts
 
 C_OBJ = $(BUILDDIR)/pdwfs.o $(BUILDDIR)/libc.o $(BUILDDIR)/utils.o
 

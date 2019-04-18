@@ -1,5 +1,4 @@
 BUILDDIR=../../build
-SCRIPTSDIR=../../scripts
 
 GO_FILES = $(wildcard config/*.go) $(wildcard redisfs/*.go) 
 
