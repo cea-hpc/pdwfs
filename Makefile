@@ -20,7 +20,7 @@ tools: tools/pdwfs
 	install tools/pdwfs $(BUILDDIR)/bin/
 	install tools/pdwfs-slurm $(BUILDDIR)/bin/
 	install tools/redis.srun $(BUILDDIR)/bin/
-	cd tools/pv && ./configure && make
+	#cd tools/pv && ./configure && make  # if pv needs rebuild
 	install tools/pv/pv $(BUILDDIR)/bin/
 
 
