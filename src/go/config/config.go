@@ -64,7 +64,7 @@ func NewRedisConf() *Redis {
 		Cluster:             false,
 		ClusterAddrs:        []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
 		UseUnlink:           true,
-		UseWritePool:        true,
+		UseWritePool:        false,
 		WritePoolBufferSize: defaultWritePoolBufferSize,
 		WritePoolWorkers:    defaultWritePoolWorkers,
 	}
