@@ -16,7 +16,6 @@ package redisfs
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -86,10 +85,7 @@ func (f MemFile) readAt(dst []byte, off int64) (int, error) {
 	if off < 0 {
 		panic(ErrNegativeOffset)
 	}
-	data, ok := f.client.ReadAt(f.path, off, int64(len(dst)))
-	if !ok {
-		panic(fmt.Errorf("reading empty file %s", f.path))
-	}
+	data, _ := f.client.ReadAt(f.path, off, int64(len(dst)))
 	n := copy(dst, data)
 	if n < len(dst) {
 		return n, io.EOF
