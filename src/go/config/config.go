@@ -27,9 +27,6 @@ import (
 
 // DefaultStripeSize is the default maximum size of file stripe
 const DefaultStripeSize = 10 * 1024 * 1024 // 10MB
-
-const defaultWritePoolWorkers = 10
-const defaultWritePoolBufferSize = 200 * 1024 * 1024 // 200MB
 const maxRedisString = 512 * 1024 * 1024             // 512MB
 
 func try(err error) {
@@ -52,9 +49,6 @@ type Redis struct {
 	Cluster             bool
 	ClusterAddrs        []string
 	UseUnlink           bool
-	UseWritePool        bool
-	WritePoolBufferSize int64
-	WritePoolWorkers    int
 }
 
 // NewRedisConf generates a default configuration
@@ -64,9 +58,6 @@ func NewRedisConf() *Redis {
 		Cluster:             false,
 		ClusterAddrs:        []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
 		UseUnlink:           true,
-		UseWritePool:        false,
-		WritePoolBufferSize: defaultWritePoolBufferSize,
-		WritePoolWorkers:    defaultWritePoolWorkers,
 	}
 
 }

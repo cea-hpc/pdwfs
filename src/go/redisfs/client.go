@@ -23,7 +23,6 @@ import (
 	"unsafe"
 
 	"github.com/cea-hpc/pdwfs/config"
-	"github.com/cea-hpc/pdwfs/util"
 	"github.com/go-redis/redis"
 )
 
@@ -39,7 +38,6 @@ var Check = Try
 
 // IRedisClient interface to allow multiple client implementations (client, ring, cluster)
 type IRedisClient interface {
-	StrLen(string) *redis.IntCmd
 	SetRange(string, int64, string) *redis.IntCmd
 	GetRange(string, int64, int64) *redis.StringCmd
 	Exists(keys ...string) *redis.IntCmd
@@ -47,8 +45,6 @@ type IRedisClient interface {
 	Get(string) *redis.StringCmd
 	Del(...string) *redis.IntCmd
 	Unlink(...string) *redis.IntCmd
-	SetNX(string, interface{}, time.Duration) *redis.BoolCmd
-	SetBit(key string, offset int64, value int) *redis.IntCmd
 	SAdd(key string, members ...interface{}) *redis.IntCmd
 	SRem(key string, members ...interface{}) *redis.IntCmd
 	SMembers(key string) *redis.StringSliceCmd
@@ -59,9 +55,6 @@ type IRedisClient interface {
 	Pipeline() redis.Pipeliner
 	Ping() *redis.StatusCmd
 	Close() error
-	PTTL(key string) *redis.DurationCmd
-	PExpire(key string, expiration time.Duration) *redis.BoolCmd
-	FlushAll() *redis.StatusCmd
 }
 
 // NewRedisClient ...
@@ -87,147 +80,10 @@ func byte2StringNoCopy(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-// Asynchronous writer pool
-
-// Job ...
-type Job struct {
-	async   bool
-	key     string
-	offset  int64
-	value   []byte
-	ackChan chan bool
-}
-
-func worker(conf *config.Redis, controllerIn chan *Job, controllerOut chan int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	client := NewRedisClient(conf)
-	defer client.Close()
-	var data string
-	for job := range controllerIn {
-		if job.async {
-			stateKey := job.key + ":state"
-			data = string(job.value) // copy
-			Try(client.Set(stateKey, "INCONSISTENT", 0).Err())
-			job.ackChan <- true
-			if job.offset < 0 {
-				// FIXME: negative offset means something for Redis
-				p := client.Pipeline()
-				p.Set(job.key, data, 0)
-				p.Del(stateKey)
-				_, err := p.Exec()
-				Check(err)
-			} else {
-				p := client.Pipeline()
-				p.SetRange(job.key, job.offset, data)
-				p.Del(stateKey)
-				_, err := p.Exec()
-				Check(err)
-			}
-			controllerOut <- len(job.value)
-		} else {
-			// synchronous case
-			data = byte2StringNoCopy(job.value) // no copy
-			if job.offset < 0 {
-				// FIXME: negative offset means something for Redis
-				Try(client.Set(job.key, data, 0).Err())
-			} else {
-				Try(client.SetRange(job.key, job.offset, data).Err())
-			}
-			job.ackChan <- true
-		}
-	}
-}
-
-// WritePool ...
-type WritePool struct {
-	maxSize     int64
-	workerHash  *util.ConsistentHash
-	jobRequest  chan *Job
-	workerChans map[string]chan *Job
-	workerResp  chan int
-	end         chan bool
-	wg          sync.WaitGroup
-}
-
-// NewWritePool ...
-func NewWritePool(conf *config.Redis) *WritePool {
-	p := &WritePool{
-		maxSize:     conf.WritePoolBufferSize,
-		workerHash:  util.NewConsistentHash(100, nil),
-		jobRequest:  make(chan *Job),
-		workerChans: make(map[string]chan *Job),
-		workerResp:  make(chan int, 1000),
-		end:         make(chan bool),
-		wg:          sync.WaitGroup{},
-	}
-
-	// start workers
-	workers := conf.WritePoolWorkers
-	p.wg.Add(workers)
-	ids := make([]string, workers)
-	for i := 0; i < workers; i++ {
-		ids[i] = strconv.Itoa(i)
-	}
-	p.workerHash.Add(ids...) // building hash in one shot is much faster than in a loop
-	for _, id := range ids {
-		c := make(chan *Job, 1000)
-		p.workerChans[id] = c
-		go worker(conf, c, p.workerResp, &p.wg)
-	}
-
-	// start the controller
-	p.wg.Add(1)
-	go func() {
-		var asyncBufSize int64
-		var asyncJobPending int
-		defer p.wg.Done()
-		for {
-			select {
-			case <-p.end:
-				for _, c := range p.workerChans {
-					close(c)
-				}
-				return
-			case job := <-p.jobRequest:
-				jobSize := int64(len(job.value))
-				if asyncBufSize+jobSize > p.maxSize {
-					// job doesn't fit in asynchronous buffer
-					job.async = false
-				}
-				if job.async {
-					asyncBufSize += jobSize
-					asyncJobPending++
-				}
-				worker := p.workerHash.Get(job.key)
-				p.workerChans[worker] <- job
-			case wrote := <-p.workerResp:
-				// receive only from async jobs
-				asyncBufSize -= int64(wrote)
-				asyncJobPending--
-			}
-		}
-	}()
-
-	return p
-}
-
-// SetRange ...
-func (p *WritePool) SetRange(key string, off int64, value []byte) {
-	ack := make(chan bool) // could come from a pool instead
-	p.jobRequest <- &Job{true, key, off, value, ack}
-	<-ack
-}
-
-// Close ...
-func (p *WritePool) Close() {
-	p.end <- true
-	p.wg.Wait()
-}
 
 // FileContentClient ...
 type FileContentClient struct {
 	redisClient IRedisClient
-	writePool   *WritePool
 	conf        *config.Redis
 	stripeSize  int64
 }
@@ -236,28 +92,9 @@ type FileContentClient struct {
 func NewFileContentClient(conf *config.Redis, stripeSize int64) *FileContentClient {
 	return &FileContentClient{
 		redisClient: NewRedisClient(conf),
-		writePool:   NewWritePool(conf),
 		conf:        conf,
 		stripeSize:  stripeSize,
 	}
-}
-
-func (c FileContentClient) writeStripe(key string, value []byte) {
-	if c.conf.UseWritePool {
-		c.writePool.SetRange(key, -1, value)
-	} else {
-		Try(c.redisClient.Set(key, byte2StringNoCopy(value), 0).Err())
-	}
-	
-}
-
-func (c FileContentClient) writeStripeAt(key string, off int64, value []byte) {
-	if c.conf.UseWritePool {
-		c.writePool.SetRange(key, off, value)
-	} else {
-		Try(c.redisClient.SetRange(key, off, byte2StringNoCopy(value)).Err())
-	}
-	
 }
 
 type stripeInfo struct {
@@ -322,9 +159,9 @@ func (c FileContentClient) WriteAt(name string, off int64, data []byte) {
 		go func(key string, off int64, data []byte, wg *sync.WaitGroup) {
 			defer wg.Done()
 			if off == 0 && int64(len(data)) == c.stripeSize {
-				c.writeStripe(key, data)
+				Try(c.redisClient.Set(key, byte2StringNoCopy(data), 0).Err())
 			} else {
-				c.writeStripeAt(key, off, data)
+				Try(c.redisClient.SetRange(key, off, byte2StringNoCopy(data)).Err())
 			}
 		}(fmt.Sprintf("%s:%d", name, stripe.id), stripe.off, data[k:k+stripe.len], &wg)
 		k += stripe.len
@@ -333,56 +170,26 @@ func (c FileContentClient) WriteAt(name string, off int64, data []byte) {
 	Try(setSize.Run(c.redisClient, []string{name + ":size"}, off+dataLen).Err())
 }
 
-var noArgCmd = redis.NewScript(`
-		local keyState = redis.call("GET", KEYS[1])
-		if keyState == "INCONSISTENT" then
-			return redis.error_reply(keyState)
-		end
-		return redis.call(ARGV[1], KEYS[2])
-	`)
-
-var twoArgsCmd = redis.NewScript(`
-	local keyState = redis.call("GET", KEYS[1])
-	if keyState == "INCONSISTENT" then
-		return redis.error_reply(keyState)
-	end
-	return redis.call(ARGV[1], KEYS[2], ARGV[2], ARGV[3])
-`)
-
-const sleep = 1 * time.Millisecond
-
 func (c FileContentClient) readStripe(key string) (string, bool) {
-	for {
-		val, err := noArgCmd.Run(c.redisClient, []string{key + ":state", key}, "GET").String()
-		if err == nil {
-			return val, true
-		}
-		if err == redis.Nil {
-			return "", false
-		}
-		if err.Error() == "INCONSISTENT" {
-			time.Sleep(sleep)
-			continue
-		}
-		panic(err)
+	val, err := c.redisClient.Get(key).Result()
+	if err == nil {
+		return val, true
 	}
+	if err == redis.Nil {
+		return "", false
+	}
+	panic(err)
 }
 
 func (c FileContentClient) readStripeRange(key string, start, end int64) (string, bool) {
-	for {
-		val, err := twoArgsCmd.Run(c.redisClient, []string{key + ":state", key}, "GETRANGE", start, end).String()
-		if err == nil {
-			return val, true
-		}
-		if err == redis.Nil {
-			return "", false
-		}
-		if err.Error() == "INCONSISTENT" {
-			time.Sleep(sleep)
-			continue
-		}
-		panic(err)
+	val, err := c.redisClient.GetRange(key, start, end).Result()
+	if err == nil {
+		return val, true
 	}
+	if err == redis.Nil {
+		return "", false
+	}
+	panic(err)
 }
 
 type readAtReturn struct {
@@ -434,24 +241,11 @@ func (c FileContentClient) ReadAt(name string, off, size int64) (string, bool) {
 	return res.String(), ok
 }
 
-func (c FileContentClient) removeStripe(key string) bool {
-	cmd := "DEL"
+func (c FileContentClient) removeStripe(key string) {
 	if c.conf.UseUnlink {
-		cmd = "UNLINK"
-	}
-	for {
-		err := noArgCmd.Run(c.redisClient, []string{key + ":state", key}, cmd).Err()
-		if err == nil {
-			return true
-		}
-		if err == redis.Nil {
-			return false
-		}
-		if err.Error() == "INCONSISTENT" {
-			time.Sleep(sleep)
-			continue
-		}
-		panic(err)
+		Try(c.redisClient.Unlink(key).Err())
+	} else {
+		Try(c.redisClient.Del(key).Err())
 	}
 }
 
@@ -519,17 +313,16 @@ func (c FileContentClient) grow(name string, size int64) {
 	newLastStripe := newStripes[len(newStripes)-1]
 	// fill new stripes with null bytes
 	for id := curLastStripe.id + 1; id <= newLastStripe.id; id++ {
-		c.writeStripeAt(fmt.Sprintf("%s:%d", name, id), c.stripeSize-1, []byte("\x00"))
+		Try(c.redisClient.SetRange(fmt.Sprintf("%s:%d", name, id), c.stripeSize-1, "\x00").Err())
 	}
 	// fill curLastStripe with null byte if needed
 	if (curLastStripe.off + curLastStripe.len) < c.stripeSize {
-		c.writeStripeAt(fmt.Sprintf("%s:%d", name, curLastStripe.id), c.stripeSize-1, []byte("\x00"))
+		Try(c.redisClient.SetRange(fmt.Sprintf("%s:%d", name, curLastStripe.id), c.stripeSize-1, "\x00").Err())
 	}
 	Try(c.redisClient.Set(name+":size", size, 0).Err())
 }
 
 // Close ...
 func (c FileContentClient) Close() error {
-	c.writePool.Close()
 	return c.redisClient.Close()
 }

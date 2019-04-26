@@ -656,10 +656,6 @@ func TestBenchOpenWriteClose(t *testing.T) {
 	server, redisConf := util.InitMiniRedis()
 	defer server.Close()
 
-	redisConf.UseWritePool = true
-	redisConf.WritePoolWorkers = 20
-	redisConf.WritePoolBufferSize = 300 * 1024 * 1024
-
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 	mountConf.StripeSize = 10 * 1024 * 1024
