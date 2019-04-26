@@ -60,7 +60,9 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 //InitMiniRedis returns a new miniredis server
 func InitMiniRedis() (*miniredis.Miniredis, *config.Redis) {
 	server, err := miniredis.Run()
-	Check(err)
+	if err != nil {
+		panic(err)
+	}
 	conf := config.NewRedisConf()
 	conf.Addrs = []string{server.Addr()}
 	conf.UseUnlink = false // miniredis does not support Unlink, defaults to Del
@@ -70,7 +72,9 @@ func InitMiniRedis() (*miniredis.Miniredis, *config.Redis) {
 //GetMountPathConf returns a default configuration (for testing)
 func GetMountPathConf() *config.Mount {
 	cwd, err := filepath.Abs(".")
-	Check(err)
+	if err != nil {
+		panic(err)
+	}
 	return &config.Mount{
 		Path:       cwd,
 		StripeSize: config.DefaultStripeSize,
@@ -100,13 +104,3 @@ func SplitPath(path string, sep string) []string {
 
 	return parts
 }
-
-// Try ...
-func Try(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-// Check is an alias for Try
-var Check = Try
