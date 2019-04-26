@@ -105,9 +105,10 @@ func writeData(t *testing.T, stripeSize int64, data []byte, off int64) {
 	defer c.Close()
 
 	c.WriteAt("myfile", off, data)
-	readData, ok := c.ReadAt("myfile", off, int64(len(data)))
-	util.Assert(t, ok, "should be true")
-	util.Equals(t, string(data), readData, "read data does not match written data")
+	readData := make([]byte, len(data), len(data))
+	n := c.ReadAt("myfile", off, readData)
+	util.Equals(t, int64(len(data)), n, "number of bytes read does not match input")
+	util.Equals(t, data, readData, "read data does not match written data")
 }
 
 func TestWriteData(t *testing.T) {
@@ -158,9 +159,9 @@ func TestReadEmpty(t *testing.T) {
 	c := NewFileContentClient(conf, 100)
 	defer c.Close()
 
-	readData, ok := c.ReadAt("myfile", 0, 1000)
-	util.Assert(t, !ok, "should be false")
-	util.Equals(t, "", readData, "data read should be empty")
+	readData := make([]byte, 1000, 1000)
+	n := c.ReadAt("myfile", 0, readData)
+	util.Equals(t, int64(0), n, "number of byte read should be 0")
 }
 
 func TestResize(t *testing.T) {
@@ -198,8 +199,9 @@ func TestTruncate(t *testing.T) {
 
 	c.Resize("myfile", 15)
 
-	readData, ok := c.ReadAt("myfile", 0, int64(len(data)+10))
-	util.Assert(t, ok, "should be true")
-	util.Equals(t, string(data[:15]), readData, "read error")
-
+	readSize := int64(len(data)+10)
+	readData := make([]byte, readSize, readSize)
+	n := c.ReadAt("myfile", 0, readData)
+	util.Equals(t, int64(15), n, "read error")
+	util.Equals(t, data[:15], readData[:n], "data read does not match data written")
 }

@@ -85,8 +85,11 @@ func (f MemFile) readAt(dst []byte, off int64) (int, error) {
 	if off < 0 {
 		panic(ErrNegativeOffset)
 	}
-	data, _ := f.client.ReadAt(f.path, off, int64(len(dst)))
-	n := copy(dst, data)
+	if len(dst) == 0 {
+		return 0, nil
+	}
+	n := int(f.client.ReadAt(f.path, off, dst))
+	//FIXME: should use int64 for all written/read lengths
 	if n < len(dst) {
 		return n, io.EOF
 	}

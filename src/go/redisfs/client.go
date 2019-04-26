@@ -17,10 +17,10 @@ package redisfs
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
+	"sync/atomic"
 
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/go-redis/redis"
@@ -170,28 +170,6 @@ func (c FileContentClient) WriteAt(name string, off int64, data []byte) {
 	Try(setSize.Run(c.redisClient, []string{name + ":size"}, off+dataLen).Err())
 }
 
-func (c FileContentClient) readStripe(key string) (string, bool) {
-	val, err := c.redisClient.Get(key).Result()
-	if err == nil {
-		return val, true
-	}
-	if err == redis.Nil {
-		return "", false
-	}
-	panic(err)
-}
-
-func (c FileContentClient) readStripeRange(key string, start, end int64) (string, bool) {
-	val, err := c.redisClient.GetRange(key, start, end).Result()
-	if err == nil {
-		return val, true
-	}
-	if err == redis.Nil {
-		return "", false
-	}
-	panic(err)
-}
-
 type readAtReturn struct {
 	id   int
 	data string
@@ -199,46 +177,41 @@ type readAtReturn struct {
 }
 
 // ReadAt ...
-func (c FileContentClient) ReadAt(name string, off, size int64) (string, bool) {
-	var res strings.Builder
-	ok := false
-
-	stripes := stripeLayout(c.stripeSize, off, size)
+func (c FileContentClient) ReadAt(name string, off int64, dst []byte) int64 {
+	var k int64
+	var n int64
+	stripes := stripeLayout(c.stripeSize, off, int64(len(dst)))
 	wg := sync.WaitGroup{}
-	wg.Add(len(stripes))
-	retChan := make(chan *readAtReturn, len(stripes))
-	for i, stripe := range stripes {
-		go func(key string, off, size int64, ret chan *readAtReturn, i int, wg *sync.WaitGroup) {
-			defer wg.Done()
-			var s string
-			var ok bool
-			if off == 0 && size == c.stripeSize {
-				s, ok = c.readStripe(key)
-			} else {
-				s, ok = c.readStripeRange(key, off, off+size-1)
-			}
-			ret <- &readAtReturn{i, s, ok}
-		}(fmt.Sprintf("%s:%d", name, stripe.id), stripe.off, stripe.len, retChan, i, &wg)
-	}
-	wg.Wait()
-	var i int
-	for {
-		// retrieve result and put them in order
-		if i == len(stripes) {
-			break
-		}
-		r := <-retChan
-		if r.id != i {
-			retChan <- r
+	for _, stripe := range stripes {
+		key := fmt.Sprintf("%s:%d", name, stripe.id)
+		dstBuf := dst[k:k+stripe.len]
+		if len(dstBuf) == 0 {
 			continue
 		}
-		res.WriteString(r.data)
-		if r.ok {
-			ok = r.ok
-		}
-		i++
+		wg.Add(1)
+		go func(key string, off int64, buf []byte, wg *sync.WaitGroup) {
+			defer wg.Done()
+			var err error
+			var s string
+			size := int64(len(buf))
+			if size == 0 {
+				return
+			}
+			if off == 0 && size == c.stripeSize {
+				s, err = c.redisClient.Get(key).Result()
+			} else {
+				s, err = c.redisClient.GetRange(key, off, off+size-1).Result()
+			}
+			if err != nil && err != redis.Nil {
+				panic(err)
+			}
+			read := copy(dstBuf, s)
+			atomic.AddInt64(&n, int64(read))
+		}(key, stripe.off, dstBuf, &wg)
+		k += stripe.len
 	}
-	return res.String(), ok
+	wg.Wait()
+	return n
 }
 
 func (c FileContentClient) removeStripe(key string) {

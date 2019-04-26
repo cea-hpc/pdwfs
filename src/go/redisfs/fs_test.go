@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"reflect"
 
 	"github.com/cea-hpc/pdwfs/util"
 )
@@ -649,7 +650,7 @@ func TestVolumesConcurrentAccess(t *testing.T) {
 }
 
 var (
-	bigdata = bytes.Repeat([]byte("0123456789"), 20000000) // 200MB
+	bigdata = bytes.Repeat([]byte("0123456789"), 200000) // 2MB
 )
 
 func TestBenchOpenWriteClose(t *testing.T) {
@@ -672,7 +673,7 @@ func TestBenchOpenWriteClose(t *testing.T) {
 	fmt.Println("Open took: ", openelapsed)
 
 	writestart := time.Now()
-	// f write dots
+	// f write bigdata
 	if n, err := f.Write(bigdata); err != nil || n != len(bigdata) {
 		t.Errorf("Unexpected write error: %d %s", n, err)
 	}
@@ -681,14 +682,32 @@ func TestBenchOpenWriteClose(t *testing.T) {
 	fmt.Println("Write took: ", writeelapsed)
 
 	closestart := time.Now()
-
 	if err := f.Close(); err != nil {
 		t.Errorf("Unexpected close error: %s", err)
 	}
-
 	closeelapsed := time.Since(closestart)
 	fmt.Println("Close took: ", closeelapsed)
 
+	reopen := time.Now()
+	f, err = fs.OpenFile("/testfile", os.O_RDONLY, 0666)
+	util.Ok(t, err)
+	reopenelapsed := time.Since(reopen)
+	fmt.Println("Reopen took: ", reopenelapsed)
+
+	readstart := time.Now()
+	// f read bigdata
+	readBuf := make([]byte, len(bigdata), len(bigdata))
+	if n, err := f.Read(readBuf); err != nil || n != len(bigdata) {
+		t.Errorf("Unexpected read error: %d %s", n, err)
+	}
+	readelapsed := time.Since(readstart)
+	fmt.Println("Read took: ", readelapsed)
+
 	allelapsed := time.Since(allstart)
 	fmt.Println("TestOpenWriteClose took: ", allelapsed)
+
+	if !reflect.DeepEqual(bigdata, readBuf) {
+		fmt.Println("read data does not match written data: exp: ", bigdata[:10], "act: ", readBuf[:10])
+		t.FailNow()
+	}
 }
