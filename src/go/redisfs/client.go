@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 	"unsafe"
-	"sync/atomic"
 
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/cea-hpc/pdwfs/util"
 	"github.com/go-redis/redis"
 )
 
@@ -76,6 +76,44 @@ func NewRedisClient(conf *config.Redis) IRedisClient {
 	return redis.NewRing(opt)
 }
 
+// RedisRing ...
+type RedisRing struct {
+	clients map[string]*redis.Client
+	hash *util.ConsistentHash
+}
+
+// NewRedisRing ...
+func NewRedisRing(conf *config.Redis) *RedisRing {
+
+	shards := make([]string, len(conf.Addrs))
+	clients := make(map[string]*redis.Client)
+	for i, addr := range conf.Addrs {
+		shards[i] = fmt.Sprintf("shard%d", i)
+		clients[shards[i]] = redis.NewClient(&redis.Options{Addr: addr})
+	}
+	hash := util.NewConsistentHash(100, nil)
+	hash.Add(shards...)
+
+	return &RedisRing{
+		clients: clients,
+		hash: hash,	
+	}
+}
+
+// GetClient ...
+func (r *RedisRing) GetClient(key string) *redis.Client {
+	return r.clients[r.hash.Get(key)]
+} 
+
+// Close ...
+func (r *RedisRing) Close() error {
+	var err error
+	for _, client := range r.clients {
+		err = client.Close()
+	}
+	return err
+}
+
 func byte2StringNoCopy(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
@@ -83,7 +121,7 @@ func byte2StringNoCopy(b []byte) string {
 
 // FileContentClient ...
 type FileContentClient struct {
-	redisClient IRedisClient
+	redis *RedisRing
 	conf        *config.Redis
 	stripeSize  int64
 }
@@ -91,7 +129,7 @@ type FileContentClient struct {
 // NewFileContentClient returns a redis client
 func NewFileContentClient(conf *config.Redis, stripeSize int64) *FileContentClient {
 	return &FileContentClient{
-		redisClient: NewRedisClient(conf),
+		redis: NewRedisRing(conf),
 		conf:        conf,
 		stripeSize:  stripeSize,
 	}
@@ -153,78 +191,96 @@ func (c FileContentClient) WriteAt(name string, off int64, data []byte) {
 	dataLen := int64(len(data))
 	stripes := stripeLayout(c.stripeSize, off, dataLen)
 	var k int64
-	wg := sync.WaitGroup{}
-	wg.Add(len(stripes))
+	pipes := make(map[string]redis.Pipeliner)
 	for _, stripe := range stripes {
-		go func(key string, off int64, data []byte, wg *sync.WaitGroup) {
-			defer wg.Done()
-			if off == 0 && int64(len(data)) == c.stripeSize {
-				Try(c.redisClient.Set(key, byte2StringNoCopy(data), 0).Err())
-			} else {
-				Try(c.redisClient.SetRange(key, off, byte2StringNoCopy(data)).Err())
-			}
-		}(fmt.Sprintf("%s:%d", name, stripe.id), stripe.off, data[k:k+stripe.len], &wg)
+		key := fmt.Sprintf("%s:%d", name, stripe.id)
+		off := stripe.off
+		data := byte2StringNoCopy(data[k:k+stripe.len])
 		k += stripe.len
+		if len(data) == 0 {
+			continue
+		}
+		clientHash := c.redis.hash.Get(key)
+		if _, ok := pipes[clientHash]; !ok {
+			pipes[clientHash] = c.redis.GetClient(key).Pipeline()
+		}
+		pipe := pipes[clientHash]
+		if off == 0 && int64(len(data)) == c.stripeSize {
+			pipe.Set(key, data, 0)
+		} else {
+			pipe.SetRange(key, off, data)
+		}
+	}
+	wg := sync.WaitGroup{}
+	for _, pipe := range pipes {
+		wg.Add(1)
+		go func(p redis.Pipeliner) {
+			defer wg.Done()
+			_, err := p.Exec()
+			Check(err)
+		}(pipe)
 	}
 	wg.Wait()
-	Try(setSize.Run(c.redisClient, []string{name + ":size"}, off+dataLen).Err())
-}
-
-type readAtReturn struct {
-	id   int
-	data string
-	ok   bool
+	key := name + ":size"
+	Try(setSize.Run(c.redis.GetClient(key), []string{key}, off+dataLen).Err())
 }
 
 // ReadAt ...
 func (c FileContentClient) ReadAt(name string, off int64, dst []byte) int64 {
-	var k int64
-	var n int64
+	var k, n int64
 	stripes := stripeLayout(c.stripeSize, off, int64(len(dst)))
-	wg := sync.WaitGroup{}
-	for _, stripe := range stripes {
+	pipes := make(map[string]redis.Pipeliner)
+	results := make([]*redis.StringCmd, len(stripes), len(stripes))
+	for i, stripe := range stripes {
 		key := fmt.Sprintf("%s:%d", name, stripe.id)
-		dstBuf := dst[k:k+stripe.len]
-		if len(dstBuf) == 0 {
-			continue
+		clientHash := c.redis.hash.Get(key)
+		if _, ok := pipes[clientHash]; !ok {
+			pipes[clientHash] = c.redis.GetClient(key).Pipeline()
 		}
+		pipe := pipes[clientHash]
+		if stripe.off == 0 && stripe.len == c.stripeSize {
+			results[i] = pipe.Get(key)
+		} else {
+			results[i] = pipe.GetRange(key, stripe.off, stripe.off+stripe.len-1)
+		}
+	}
+	wg := sync.WaitGroup{}
+	for _, pipe := range pipes {
 		wg.Add(1)
-		go func(key string, off int64, buf []byte, wg *sync.WaitGroup) {
+		go func(p redis.Pipeliner) {
 			defer wg.Done()
-			var err error
-			var s string
-			size := int64(len(buf))
-			if size == 0 {
-				return
-			}
-			if off == 0 && size == c.stripeSize {
-				s, err = c.redisClient.Get(key).Result()
-			} else {
-				s, err = c.redisClient.GetRange(key, off, off+size-1).Result()
-			}
+			_, err := p.Exec()
 			if err != nil && err != redis.Nil {
 				panic(err)
 			}
-			read := copy(dstBuf, s)
-			atomic.AddInt64(&n, int64(read))
-		}(key, stripe.off, dstBuf, &wg)
-		k += stripe.len
+		}(pipe)
 	}
 	wg.Wait()
+	k = 0
+	for i, stripe := range stripes {
+		value, err := results[i].Result()
+		if err != nil && err != redis.Nil {
+			panic(err)
+		}
+		read := copy(dst[k:k+stripe.len], value)
+		k += stripe.len
+		n += int64(read)
+	}
 	return n
 }
 
 func (c FileContentClient) removeStripe(key string) {
 	if c.conf.UseUnlink {
-		Try(c.redisClient.Unlink(key).Err())
+		Try(c.redis.GetClient(key).Unlink(key).Err())
 	} else {
-		Try(c.redisClient.Del(key).Err())
+		Try(c.redis.GetClient(key).Del(key).Err())
 	}
 }
 
 // GetSize ...
 func (c FileContentClient) GetSize(name string) int64 {
-	s, err := c.redisClient.Get(name + ":size").Result()
+	key := name + ":size"
+	s, err := c.redis.GetClient(key).Get(key).Result()
 	if err != nil && err == redis.Nil {
 		return 0
 	}
@@ -241,7 +297,8 @@ func (c FileContentClient) Remove(name string) {
 	for _, stripe := range stripes {
 		c.removeStripe(fmt.Sprintf("%s:%d", name, stripe.id))
 	}
-	Try(c.redisClient.Del(name + ":size").Err())
+	key := name + ":size"
+	Try(c.redis.GetClient(key).Del(key).Err())
 }
 
 // Resize ...
@@ -275,8 +332,9 @@ func (c FileContentClient) shrink(name string, size int64) {
 	}
 	// resize the last stripe
 	stripeKey := fmt.Sprintf("%s:%d", name, newLastStripe.id)
-	Try(trimString.Run(c.redisClient, []string{stripeKey}, newLastStripe.len-1).Err())
-	Try(c.redisClient.Set(name+":size", size, 0).Err())
+	Try(trimString.Run(c.redis.GetClient(stripeKey), []string{stripeKey}, newLastStripe.len-1).Err())
+	key := name + ":size"
+	Try(c.redis.GetClient(key).Set(key, size, 0).Err())
 }
 
 func (c FileContentClient) grow(name string, size int64) {
@@ -286,16 +344,19 @@ func (c FileContentClient) grow(name string, size int64) {
 	newLastStripe := newStripes[len(newStripes)-1]
 	// fill new stripes with null bytes
 	for id := curLastStripe.id + 1; id <= newLastStripe.id; id++ {
-		Try(c.redisClient.SetRange(fmt.Sprintf("%s:%d", name, id), c.stripeSize-1, "\x00").Err())
+		key := fmt.Sprintf("%s:%d", name, id)
+		Try(c.redis.GetClient(key).SetRange(key, c.stripeSize-1, "\x00").Err())
 	}
 	// fill curLastStripe with null byte if needed
 	if (curLastStripe.off + curLastStripe.len) < c.stripeSize {
-		Try(c.redisClient.SetRange(fmt.Sprintf("%s:%d", name, curLastStripe.id), c.stripeSize-1, "\x00").Err())
+		key := fmt.Sprintf("%s:%d", name, curLastStripe.id)
+		Try(c.redis.GetClient(key).SetRange(key, c.stripeSize-1, "\x00").Err())
 	}
-	Try(c.redisClient.Set(name+":size", size, 0).Err())
+	key := name + ":size"
+	Try(c.redis.GetClient(key).Set(key, size, 0).Err())
 }
 
 // Close ...
 func (c FileContentClient) Close() error {
-	return c.redisClient.Close()
+	return c.redis.Close()
 }
