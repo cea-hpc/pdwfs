@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+	"sync/atomic"
 
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/cea-hpc/pdwfs/util"
@@ -257,15 +258,21 @@ func (c FileContentClient) ReadAt(name string, off int64, dst []byte) int64 {
 	}
 	wg.Wait()
 	k = 0
+	wg = sync.WaitGroup{}
 	for i, stripe := range stripes {
 		value, err := results[i].Result()
 		if err != nil && err != redis.Nil {
 			panic(err)
 		}
-		read := copy(dst[k:k+stripe.len], value)
+		wg.Add(1)
+		go func(start, end int64) {
+			defer wg.Done()
+			read := copy(dst[start:end], value)
+			atomic.AddInt64(&n, int64(read))	
+		}(k, k+stripe.len)
 		k += stripe.len
-		n += int64(read)
 	}
+	wg.Wait()
 	return n
 }
 
