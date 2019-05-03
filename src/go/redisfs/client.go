@@ -192,34 +192,21 @@ func (c FileContentClient) WriteAt(name string, off int64, data []byte) {
 	dataLen := int64(len(data))
 	stripes := stripeLayout(c.stripeSize, off, dataLen)
 	var k int64
-	pipes := make(map[string]redis.Pipeliner)
+	wg := sync.WaitGroup{}
 	for _, stripe := range stripes {
-		key := fmt.Sprintf("%s:%d", name, stripe.id)
-		off := stripe.off
-		data := byte2StringNoCopy(data[k:k+stripe.len])
-		k += stripe.len
 		if len(data) == 0 {
 			continue
 		}
-		clientHash := c.redis.hash.Get(key)
-		if _, ok := pipes[clientHash]; !ok {
-			pipes[clientHash] = c.redis.GetClient(key).Pipeline()
-		}
-		pipe := pipes[clientHash]
-		if off == 0 && int64(len(data)) == c.stripeSize {
-			pipe.Set(key, data, 0)
-		} else {
-			pipe.SetRange(key, off, data)
-		}
-	}
-	wg := sync.WaitGroup{}
-	for _, pipe := range pipes {
 		wg.Add(1)
-		go func(p redis.Pipeliner) {
+		go func(key string, off int64, data string) {
 			defer wg.Done()
-			_, err := p.Exec()
-			Check(err)
-		}(pipe)
+			if off == 0 && int64(len(data)) == c.stripeSize {
+				c.redis.GetClient(key).Set(key, data, 0)
+			} else {
+				c.redis.GetClient(key).SetRange(key, off, data)
+			}
+		}(fmt.Sprintf("%s:%d", name, stripe.id), stripe.off, byte2StringNoCopy(data[k:k+stripe.len]))
+		k += stripe.len	
 	}
 	wg.Wait()
 	key := name + ":size"
@@ -230,49 +217,28 @@ func (c FileContentClient) WriteAt(name string, off int64, data []byte) {
 func (c FileContentClient) ReadAt(name string, off int64, dst []byte) int64 {
 	var k, n int64
 	stripes := stripeLayout(c.stripeSize, off, int64(len(dst)))
-	pipes := make(map[string]redis.Pipeliner)
-	results := make([]*redis.StringCmd, len(stripes), len(stripes))
-	for i, stripe := range stripes {
-		key := fmt.Sprintf("%s:%d", name, stripe.id)
-		clientHash := c.redis.hash.Get(key)
-		if _, ok := pipes[clientHash]; !ok {
-			pipes[clientHash] = c.redis.GetClient(key).Pipeline()
-		}
-		pipe := pipes[clientHash]
-		if stripe.off == 0 && stripe.len == c.stripeSize {
-			results[i] = pipe.Get(key)
-		} else {
-			results[i] = pipe.GetRange(key, stripe.off, stripe.off+stripe.len-1)
-		}
-	}
 	wg := sync.WaitGroup{}
-	for _, pipe := range pipes {
+	for _, stripe := range stripes {
 		wg.Add(1)
-		go func(p redis.Pipeliner) {
+		go func(key string, off, size int64, dst []byte) {
 			defer wg.Done()
-			_, err := p.Exec()
+			var res string
+			var err error
+			if off == 0 && size == c.stripeSize {
+				res, err = c.redis.GetClient(key).Get(key).Result()
+			} else {
+				res, err = c.redis.GetClient(key).GetRange(key, off, off+size-1).Result()
+			}
 			if err != nil && err != redis.Nil {
 				panic(err)
 			}
-		}(pipe)
-	}
-	wg.Wait()
-	k = 0
-	wg = sync.WaitGroup{}
-	for i, stripe := range stripes {
-		value, err := results[i].Result()
-		if err != nil && err != redis.Nil {
-			panic(err)
-		}
-		wg.Add(1)
-		go func(start, end int64) {
-			defer wg.Done()
-			read := copy(dst[start:end], value)
-			atomic.AddInt64(&n, int64(read))	
-		}(k, k+stripe.len)
+			read := copy(dst, res)
+			atomic.AddInt64(&n, int64(read))
+		}(fmt.Sprintf("%s:%d", name, stripe.id), stripe.off, stripe.len, dst[k:k+stripe.len])
 		k += stripe.len
 	}
 	wg.Wait()
+	k = 0
 	return n
 }
 
