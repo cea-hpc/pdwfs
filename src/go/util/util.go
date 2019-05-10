@@ -16,15 +16,26 @@ package util
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/alicebob/miniredis"
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/gomodule/redigo/redis"
 )
+
+func try(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+var check = try
 
 // testing utilities
 
@@ -57,15 +68,46 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 	}
 }
 
-//InitMiniRedis returns a new miniredis server
-func InitMiniRedis() (*miniredis.Miniredis, *config.Redis) {
-	server, err := miniredis.Run()
-	if err != nil {
+// RedisTestServer ...
+type RedisTestServer struct {
+	cmd *exec.Cmd
+}
+
+// NewRedisTestServer ...
+func NewRedisTestServer() *RedisTestServer {
+	_, err := exec.LookPath("redis-server")
+	check(err)
+	return &RedisTestServer{
+		cmd: exec.Command("redis-server", "--save", "\"\""),
+	}
+}
+
+// Start ...
+func (r *RedisTestServer) Start() {
+	try(r.cmd.Start())
+	time.Sleep(50 * time.Millisecond)
+	for {
+		if conn, err := redis.Dial("tcp", ":6379"); err == nil {
+			conn.Close()
+			return
+		}
+	}
+}
+
+// Stop ...
+func (r *RedisTestServer) Stop() {
+	if err := r.cmd.Process.Signal(os.Interrupt); err != nil {
 		panic(err)
 	}
+	r.cmd.Wait()
+}
+
+//InitRedisTestServer returns a new miniredis server
+func InitRedisTestServer() (*RedisTestServer, *config.Redis) {
+	server := NewRedisTestServer()
+	server.Start()
 	conf := config.NewRedisConf()
-	conf.Addrs = []string{server.Addr()}
-	conf.UseUnlink = false // miniredis does not support Unlink, defaults to Del
+	conf.Addrs = []string{":6379"}
 	return server, conf
 }
 

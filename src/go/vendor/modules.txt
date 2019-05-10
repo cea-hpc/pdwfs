@@ -1,21 +1,3 @@
-# github.com/alicebob/gopher-json v0.0.0-20180125190556-5a6b3ba71ee6
-github.com/alicebob/gopher-json
-# github.com/alicebob/miniredis v2.5.0+incompatible
-github.com/alicebob/miniredis
-github.com/alicebob/miniredis/server
-# github.com/go-redis/redis v6.15.1+incompatible
-github.com/go-redis/redis
-github.com/go-redis/redis/internal
-github.com/go-redis/redis/internal/consistenthash
-github.com/go-redis/redis/internal/hashtag
-github.com/go-redis/redis/internal/pool
-github.com/go-redis/redis/internal/proto
-github.com/go-redis/redis/internal/util
 # github.com/gomodule/redigo v2.0.0+incompatible
 github.com/gomodule/redigo/redis
 github.com/gomodule/redigo/internal
-# github.com/yuin/gopher-lua v0.0.0-20190206043414-8bfc7677f583
-github.com/yuin/gopher-lua
-github.com/yuin/gopher-lua/parse
-github.com/yuin/gopher-lua/ast
-github.com/yuin/gopher-lua/pm

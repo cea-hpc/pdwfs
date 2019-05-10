@@ -98,15 +98,15 @@ func TestLayout(t *testing.T) {
 }
 
 func writeData(t *testing.T, stripeSize int64, data []byte, off int64) {
-	server, conf := util.InitMiniRedis()
-	defer server.Close()
+	redis, conf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	c := NewFileContentClient(conf, stripeSize)
-	defer c.Close()
+	store := NewDataStore(NewRedisRing(conf), stripeSize)
+	defer store.Close()
 
-	c.WriteAt("myfile", off, data)
+	store.WriteAt("myfile", off, data)
 	readData := make([]byte, len(data), len(data))
-	n := c.ReadAt("myfile", off, readData)
+	n := store.ReadAt("myfile", off, readData)
 	util.Equals(t, int64(len(data)), n, "number of bytes read does not match input")
 	util.Equals(t, data, readData, "read data does not match written data")
 }
@@ -153,55 +153,55 @@ func TestWriteData(t *testing.T) {
 }
 
 func TestReadEmpty(t *testing.T) {
-	server, conf := util.InitMiniRedis()
-	defer server.Close()
+	redis, conf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	c := NewFileContentClient(conf, 100)
-	defer c.Close()
+	store := NewDataStore(NewRedisRing(conf), 100)
+	defer store.Close()
 
 	readData := make([]byte, 1000, 1000)
-	n := c.ReadAt("myfile", 0, readData)
+	n := store.ReadAt("myfile", 0, readData)
 	util.Equals(t, int64(0), n, "number of byte read should be 0")
 }
 
 func TestResize(t *testing.T) {
-	server, conf := util.InitMiniRedis()
-	defer server.Close()
+	redis, conf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	c := NewFileContentClient(conf, 100)
-	defer c.Close()
+	store := NewDataStore(NewRedisRing(conf), 100)
+	defer store.Close()
 
-	c.Resize("myfile", 100)
-	util.Equals(t, int64(100), c.GetSize("myfile"), "resize error")
+	store.Resize("myfile", 100)
+	util.Equals(t, int64(100), store.GetSize("myfile"), "resize error")
 
-	c.Resize("myfile", 100) // no op
-	util.Equals(t, int64(100), c.GetSize("myfile"), "resize error")
+	store.Resize("myfile", 100) // no op
+	util.Equals(t, int64(100), store.GetSize("myfile"), "resize error")
 
-	c.Resize("myfile", 250)
-	util.Equals(t, int64(250), c.GetSize("myfile"), "resize error")
+	store.Resize("myfile", 250)
+	util.Equals(t, int64(250), store.GetSize("myfile"), "resize error")
 
-	c.Resize("myfile", 150)
-	util.Equals(t, int64(150), c.GetSize("myfile"), "resize error")
+	store.Resize("myfile", 150)
+	util.Equals(t, int64(150), store.GetSize("myfile"), "resize error")
 
-	c.Resize("myfile", 0)
-	util.Equals(t, int64(0), c.GetSize("myfile"), "resize error")
+	store.Resize("myfile", 0)
+	util.Equals(t, int64(0), store.GetSize("myfile"), "resize error")
 }
 
 func TestTruncate(t *testing.T) {
-	server, conf := util.InitMiniRedis()
-	defer server.Close()
+	redis, conf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	c := NewFileContentClient(conf, 20) // 20 bytes stripes
-	defer c.Close()
+	store := NewDataStore(NewRedisRing(conf), 20) // 20 bytes stripes
+	defer store.Close()
 
 	data := bytes.Repeat([]byte("0123456789"), 3) // 30 bytes to write
-	c.WriteAt("myfile", 0, data)
+	store.WriteAt("myfile", 0, data)
 
-	c.Resize("myfile", 15)
+	store.Resize("myfile", 15)
 
-	readSize := int64(len(data)+10)
+	readSize := int64(len(data) + 10)
 	readData := make([]byte, readSize, readSize)
-	n := c.ReadAt("myfile", 0, readData)
+	n := store.ReadAt("myfile", 0, readData)
 	util.Equals(t, int64(15), n, "read error")
 	util.Equals(t, data[:15], readData[:n], "data read does not match data written")
 }

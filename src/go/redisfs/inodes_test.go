@@ -22,31 +22,29 @@ import (
 )
 
 func TestInodeMeta(t *testing.T) {
-	server, confRedis := util.InitMiniRedis()
-	defer server.Close()
+	redis, confRedis := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	confMount := util.GetMountPathConf()
 
-	metaClient := NewRedisClient(confRedis)
-	defer metaClient.Close()
-	dataClient := NewFileContentClient(confRedis, int64(confMount.StripeSize))
-	defer dataClient.Close()
+	ring := NewRedisRing(confRedis)
+	defer ring.Close()
+	store := NewDataStore(ring, int64(confMount.StripeSize))
+	defer store.Close()
 
-	i := NewInode(confMount, dataClient, metaClient, "id")
+	i := NewInode(confMount, store, ring, "id")
 
 	res, err := i.exists()
 	util.Ok(t, err)
 	util.Equals(t, false, res, "no metadata expected")
 
-	err = i.initMeta(true, 0600)
-	util.Ok(t, err)
+	i.initMeta(true, 0600)
 
 	res, err = i.exists()
 	util.Ok(t, err)
 	util.Equals(t, true, res, "metadata expected")
 
-	err = i.initMeta(false, 0777) // should be a no op
-	util.Ok(t, err)
+	i.initMeta(false, 0777) // should be a no op
 
 	d := i.IsDir()
 	util.Ok(t, err)
@@ -56,6 +54,5 @@ func TestInodeMeta(t *testing.T) {
 	util.Ok(t, err)
 	util.Equals(t, m, os.FileMode(0600), "should be 0600 mode")
 
-	err = i.delMeta()
-	util.Ok(t, err)
+	i.delMeta()
 }

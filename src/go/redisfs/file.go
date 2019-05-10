@@ -34,7 +34,7 @@ var (
 
 // MemFile represents a file backed by a Store which is secured from concurrent access.
 type MemFile struct {
-	client *FileContentClient
+	store  *DataStore
 	path   string
 	offset int64
 	mtx    *sync.RWMutex
@@ -42,11 +42,11 @@ type MemFile struct {
 
 // NewMemFile creates a file which byte slice is safe from concurrent access,
 // the file itself is not thread-safe.
-func NewMemFile(client *FileContentClient, path string, mtx *sync.RWMutex) *MemFile {
+func NewMemFile(store *DataStore, path string, mtx *sync.RWMutex) *MemFile {
 	return &MemFile{
-		client: client,
-		path:   path,
-		mtx:    mtx,
+		store: store,
+		path:  path,
+		mtx:   mtx,
 	}
 }
 
@@ -57,7 +57,7 @@ func (f MemFile) Name() string {
 
 // Size of file
 func (f MemFile) Size() int64 {
-	return f.client.GetSize(f.path)
+	return f.store.GetSize(f.path)
 }
 
 // Sync has no effect
@@ -72,7 +72,7 @@ func (f MemFile) Truncate(size int64) error {
 	}
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
-	f.client.Resize(f.path, size)
+	f.store.Resize(f.path, size)
 	return nil
 }
 
@@ -88,7 +88,7 @@ func (f MemFile) readAt(dst []byte, off int64) (int, error) {
 	if len(dst) == 0 {
 		return 0, nil
 	}
-	n := int(f.client.ReadAt(f.path, off, dst))
+	n := int(f.store.ReadAt(f.path, off, dst))
 	//FIXME: should use int64 for all written/read lengths
 	if n < len(dst) {
 		return n, io.EOF
@@ -148,7 +148,7 @@ func (f MemFile) writeAt(data []byte, off int64) (int, error) {
 	if off < 0 {
 		panic(ErrNegativeOffset)
 	}
-	f.client.WriteAt(f.path, off, data)
+	f.store.WriteAt(f.path, off, data)
 	return len(data), nil
 }
 

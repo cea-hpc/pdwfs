@@ -28,8 +28,8 @@ import (
 )
 
 func TestCreate(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -75,8 +75,8 @@ func TestCreate(t *testing.T) {
 }
 
 func TestCreateRelative(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	cwd, err := os.Getwd()
@@ -95,8 +95,8 @@ func TestCreateRelative(t *testing.T) {
 }
 
 func TestMkdirAbs(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -120,8 +120,8 @@ func TestMkdirAbs(t *testing.T) {
 }
 
 func TestMkdirRel(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	cwd, err := os.Getwd()
@@ -139,8 +139,8 @@ func TestMkdirRel(t *testing.T) {
 }
 
 func TestMkdirTree(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -166,8 +166,8 @@ func TestMkdirTree(t *testing.T) {
 }
 
 func TestMkdirMountPath(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/foo"
@@ -183,8 +183,8 @@ func TestMkdirMountPath(t *testing.T) {
 }
 
 func TestReadDir(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -237,8 +237,8 @@ func TestReadDir(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -297,8 +297,8 @@ func TestRemove(t *testing.T) {
 }
 
 func TestReadWrite(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -354,8 +354,8 @@ func TestReadWrite(t *testing.T) {
 }
 
 func TestOpenRO(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -374,8 +374,8 @@ func TestOpenRO(t *testing.T) {
 }
 
 func TestOpenWO(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -407,8 +407,8 @@ func TestOpenWO(t *testing.T) {
 }
 
 func TestOpenAppend(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -455,8 +455,8 @@ func TestOpenAppend(t *testing.T) {
 }
 
 func TestTruncateToLength(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -509,8 +509,8 @@ func TestTruncateToLength(t *testing.T) {
 }
 
 func TestTruncateToZero(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -543,8 +543,8 @@ func TestTruncateToZero(t *testing.T) {
 }
 
 func TestStat(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -610,8 +610,8 @@ func readFile(fs *RedisFS, name string) ([]byte, error) {
 }
 
 func TestVolumesConcurrentAccess(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
@@ -654,8 +654,8 @@ var (
 )
 
 func TestBenchOpenWriteClose(t *testing.T) {
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"

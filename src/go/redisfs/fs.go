@@ -67,36 +67,37 @@ const PathSeparator = "/"
 
 // RedisFS is a in-memory filesystem
 type RedisFS struct {
-	mountConf  *config.Mount
-	dataClient *FileContentClient
-	metaClient IRedisClient
-	inodes     map[string]*Inode
-	root       *Inode
+	mountConf *config.Mount
+	dataStore *DataStore
+	metaStore IRedisClient
+	inodes    map[string]*Inode
+	root      *Inode
 }
 
 // NewRedisFS a new RedisFS filesystem which entirely resides in memory
 func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
-	dataClient := NewFileContentClient(redisConf, int64(mountConf.StripeSize))
-	metaClient := NewRedisClient(redisConf)
+	redisClient := NewRedisRing(redisConf)
+	dataStore := NewDataStore(redisClient, int64(mountConf.StripeSize))
+	metaStore := redisClient
 
 	// create root inode
 	//FIXME: mount path (root) should only be created it it exists on the FS at startup
-	root := NewInode(mountConf, dataClient, metaClient, mountConf.Path)
-	Try(root.initMeta(true, 0600))
+	root := NewInode(mountConf, dataStore, metaStore, mountConf.Path)
+	root.initMeta(true, 0600)
 
 	return &RedisFS{
-		mountConf:  mountConf,
-		metaClient: metaClient,
-		dataClient: dataClient,
-		inodes:     map[string]*Inode{root.Path(): root},
-		root:       root,
+		mountConf: mountConf,
+		metaStore: metaStore,
+		dataStore: dataStore,
+		inodes:    map[string]*Inode{root.Path(): root},
+		root:      root,
 	}
 }
 
 // Finalize performs close up actions on the virtual file system
 func (fs *RedisFS) Finalize() {
-	fs.metaClient.Close()
-	fs.dataClient.Close()
+	fs.metaStore.Close()
+	fs.dataStore.Close()
 }
 
 // ValidatePath ensures path belongs to a filesystem tree catched by pdwfs
@@ -112,8 +113,8 @@ func (fs *RedisFS) ValidatePath(path string) error {
 }
 
 func (fs *RedisFS) createInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
-	i := NewInode(fs.mountConf, fs.dataClient, fs.metaClient, path)
-	Try(i.initMeta(dir, mode))
+	i := NewInode(fs.mountConf, fs.dataStore, fs.metaStore, path)
+	i.initMeta(dir, mode)
 	parent.setChild(i)
 	fs.inodes[i.Path()] = i
 	return i
@@ -123,7 +124,7 @@ func (fs *RedisFS) getInode(path string) (*Inode, bool) {
 	if i, ok := fs.inodes[path]; ok {
 		return i, true
 	}
-	i := NewInode(fs.mountConf, fs.dataClient, fs.metaClient, path)
+	i := NewInode(fs.mountConf, fs.dataStore, fs.metaStore, path)
 	if ok, _ := i.exists(); !ok {
 		return nil, false
 	}

@@ -14,3 +14,7 @@ test:
 	go vet -mod=vendor ./...
 	# count=1 deactivate test results caching
 	go test -mod=vendor -failfast -race -count=1 -timeout 10s ./...  
+
+tidy:
+	go mod tidy
+	go mod vendor

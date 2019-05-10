@@ -49,8 +49,8 @@ func readFile(pdwfs *PdwFS, filename string) ([]byte, error) {
 
 func TestMultiMount(t *testing.T) {
 
-	server, redisConf := util.InitMiniRedis()
-	defer server.Close()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
 	conf := config.New()
 	conf.Redis = redisConf

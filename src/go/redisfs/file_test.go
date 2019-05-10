@@ -21,7 +21,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alicebob/miniredis"
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/cea-hpc/pdwfs/util"
 )
@@ -36,24 +35,24 @@ var (
 	huge  = strings.Repeat("0123456789", 2000000) // 20 MB
 )
 
-func setupMemFile(t *testing.T) (*MemFile, *miniredis.Miniredis, *FileContentClient) {
-	server, conf := util.InitMiniRedis()
-	dataClient := NewFileContentClient(conf, config.DefaultStripeSize)
-	f := NewMemFile(dataClient, "/path/to/file", &sync.RWMutex{})
-	return f, server, dataClient
+func setupMemFile(t *testing.T) (*MemFile, *util.RedisTestServer, *DataStore) {
+	redis, conf := util.InitRedisTestServer()
+	store := NewDataStore(NewRedisRing(conf), config.DefaultStripeSize)
+	f := NewMemFile(store, "/path/to/file", &sync.RWMutex{})
+	return f, redis, store
 }
 
 func TestFileInterface(t *testing.T) {
-	f, server, client := setupMemFile(t)
-	defer server.Close()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
 	defer client.Close()
 
 	_ = File(f)
 }
 
 func TestWrite(t *testing.T) {
-	f, server, client := setupMemFile(t)
-	defer server.Close()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
 	defer client.Close()
 
 	// Write first dots
@@ -138,8 +137,8 @@ func TestWrite(t *testing.T) {
 }
 
 func TestSeek(t *testing.T) {
-	f, server, client := setupMemFile(t)
-	defer server.Close()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
 	defer client.Close()
 
 	// write dots
@@ -168,8 +167,8 @@ func TestSeek(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	f, server, client := setupMemFile(t)
-	defer server.Close()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
 	defer client.Close()
 
 	// write dots
@@ -190,8 +189,8 @@ func TestRead(t *testing.T) {
 }
 
 func TestReadAt(t *testing.T) {
-	f, server, client := setupMemFile(t)
-	defer server.Close()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
 	defer client.Close()
 
 	// write dots
@@ -228,8 +227,8 @@ func TestReadAt(t *testing.T) {
 }
 
 func TestSize(t *testing.T) {
-	f, server, client := setupMemFile(t)
-	defer server.Close()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
 	defer client.Close()
 
 	// write dots

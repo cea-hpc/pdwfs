@@ -27,7 +27,7 @@ import (
 
 // DefaultStripeSize is the default maximum size of file stripe
 const DefaultStripeSize = 10 * 1024 * 1024 // 10MB
-const maxRedisString = 512 * 1024 * 1024             // 512MB
+const maxRedisString = 512 * 1024 * 1024   // 512MB
 
 func try(err error) {
 	if err != nil {
@@ -45,19 +45,17 @@ type Mount struct {
 
 //Redis connection configuration
 type Redis struct {
-	Addrs               []string
-	Cluster             bool
-	ClusterAddrs        []string
-	UseUnlink           bool
+	Addrs        []string
+	Cluster      bool
+	ClusterAddrs []string
 }
 
 // NewRedisConf generates a default configuration
 func NewRedisConf() *Redis {
 	return &Redis{
-		Addrs:               []string{":6379"},
-		Cluster:             false,
-		ClusterAddrs:        []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
-		UseUnlink:           true,
+		Addrs:        []string{":6379"},
+		Cluster:      false,
+		ClusterAddrs: []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
 	}
 
 }

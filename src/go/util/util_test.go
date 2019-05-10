@@ -17,6 +17,8 @@ package util
 import (
 	"reflect"
 	"testing"
+
+	"github.com/gomodule/redigo/redis"
 )
 
 func TestSplitPath(t *testing.T) {
@@ -39,4 +41,23 @@ func TestSplitPath(t *testing.T) {
 	if p := SplitPath("usr/src/linux/", PathSeperator); !reflect.DeepEqual(p, []string{".", "usr", "src", "linux"}) {
 		t.Errorf("Invalid path: %q", p)
 	}
+}
+
+func TestRedisTestServer(t *testing.T) {
+	server := NewRedisTestServer()
+	server.Start()
+	defer server.Stop()
+	conn, err := redis.Dial("tcp", ":6379")
+	if err != nil {
+		panic(err)
+	}
+	_, err = conn.Do("SET", "foo", "bar")
+	if err != nil {
+		panic(err)
+	}
+	s, err := redis.String(conn.Do("GET", "foo"))
+	if err != nil {
+		panic(err)
+	}
+	Equals(t, "bar", s, "reply should be bar")
 }
