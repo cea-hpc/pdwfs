@@ -16,19 +16,6 @@ run: build
 connect:
 	docker exec -it hydro-run bash
 
-
-define BROWSER_PYSCRIPT
-import os, webbrowser, sys
-try:
-	from urllib import pathname2url
-except:
-	from urllib.request import pathname2url
-webbrowser.open("file://" + pathname2url(os.path.abspath(sys.argv[1])))
-endef
-export BROWSER_PYSCRIPT
-
-BROWSER := python -c "$$BROWSER_PYSCRIPT"
-
 watch:
-	@echo "<video preload controls autoplay loop src=hydro.mp4></video>" > output/video.html && $(BROWSER) output/video.html
+	@echo "<video preload controls autoplay loop src=hydro.mp4></video>" > output/video.html && python -m webbrowser -t "output/video.html"
 

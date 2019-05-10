@@ -13,24 +13,10 @@ build:
 
 run: build
 	$(DOCKER_RUN) jupyter-notebook
-	
-
-define BROWSER_PYSCRIPT
-import os, webbrowser, sys
-try:
-	from urllib import pathname2url
-except:
-	from urllib.request import pathname2url
-webbrowser.open("file://" + pathname2url(os.path.abspath(sys.argv[1])))
-endef
-export BROWSER_PYSCRIPT
-
-BROWSER := python -c "$$BROWSER_PYSCRIPT"
 
 bench: build
 	$(DOCKER_RUN) ./bench.py $(shell git describe)	
-	$(BROWSER) output/bench.html
-
+	python -m webbrowser -t "output/bench.html"
 
 connect:
 	docker exec -it ior-run bash
