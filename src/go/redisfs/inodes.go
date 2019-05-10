@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cea-hpc/pdwfs/config"
-	"github.com/gomodule/redigo/redis"
 )
 
 //Inode object
@@ -79,7 +78,7 @@ func (i *Inode) IsDir() bool {
 	if i.isDir == nil {
 		key := i.metaBaseKey + ":isDir"
 		res, err := i.metaStore.Get(key)
-		if err != nil && err == redis.ErrNil {
+		if err != nil && err == ErrRedisKeyNotFound {
 			panic(fmt.Errorf("key '%s' not found", key))
 		}
 		Check(err)
@@ -94,7 +93,7 @@ func (i *Inode) Mode() os.FileMode {
 	if i.mode == nil {
 		key := i.metaBaseKey + ":mode"
 		val, err := i.metaStore.Get(key)
-		if err != nil && err == redis.ErrNil {
+		if err != nil && err == ErrRedisKeyNotFound {
 			panic(fmt.Errorf("key '%s' not found", key))
 		}
 		Check(err)

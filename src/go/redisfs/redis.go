@@ -15,6 +15,7 @@
 package redisfs
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,11 @@ import (
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/cea-hpc/pdwfs/util"
 	"github.com/gomodule/redigo/redis"
+)
+
+var (
+	// ErrRedisKeyNotFound is returned if a queried key in Redis is not found
+	ErrRedisKeyNotFound = errors.New("Redis key not found")
 )
 
 // Try ...
@@ -53,12 +59,12 @@ type IRedisClient interface {
 	SMembers(key string) ([]string, error)
 }
 
-// RedisClient ...
+// RedisClient is a client to a single Redis instance, safe to use by multiple goroutines
 type RedisClient struct {
 	pool *redis.Pool
 }
 
-// NewRedisClient ...
+// NewRedisClient creates a new RedisClient instance
 func NewRedisClient(addr string) *RedisClient {
 	return &RedisClient{
 		pool: &redis.Pool{
@@ -87,7 +93,11 @@ func (c *RedisClient) SetRange(key string, offset int64, data []byte) error {
 func (c *RedisClient) GetRange(key string, start, end int64) ([]byte, error) {
 	conn := c.pool.Get()
 	defer conn.Close()
-	return redis.Bytes(conn.Do("GETRANGE", key, start, end))
+	b, err := redis.Bytes(conn.Do("GETRANGE", key, start, end))
+	if err == redis.ErrNil {
+		return b, ErrRedisKeyNotFound
+	}
+	return b, err
 }
 
 // Exists ...
@@ -115,7 +125,11 @@ func (c *RedisClient) SetNX(key string, data []byte) error {
 func (c *RedisClient) Get(key string) ([]byte, error) {
 	conn := c.pool.Get()
 	defer conn.Close()
-	return redis.Bytes(conn.Do("GET", key))
+	b, err := redis.Bytes(conn.Do("GET", key))
+	if err == redis.ErrNil {
+		return b, ErrRedisKeyNotFound
+	}
+	return b, err
 }
 
 // Unlink ...

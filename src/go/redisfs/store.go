@@ -117,7 +117,7 @@ func (s DataStore) ReadAt(name string, off int64, dst []byte) int64 {
 			} else {
 				res, err = s.ring.GetRange(key, off, off+size-1)
 			}
-			if err != nil && err != redis.ErrNil {
+			if err != nil && err != ErrRedisKeyNotFound {
 				panic(err)
 			}
 			read := copy(dst, res)
@@ -160,7 +160,7 @@ func (s DataStore) setSizeIfMax(name string, size int64) error {
 // GetSize ...
 func (s DataStore) GetSize(name string) int64 {
 	res, err := s.ring.Get(name + ":size")
-	if err != nil && err == redis.ErrNil {
+	if err != nil && err == ErrRedisKeyNotFound {
 		return 0
 	}
 	Check(err)
