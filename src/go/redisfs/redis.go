@@ -133,10 +133,15 @@ func (c *RedisClient) Get(key string) ([]byte, error) {
 }
 
 // Unlink ...
-func (c *RedisClient) Unlink(key string) error {
+func (c *RedisClient) Unlink(keys ...string) error {
+	// convert slice of string in slice of interface{} ref: https://golang.org/doc/faq#convert_slice_of_interface
+	k := make([]interface{}, len(keys))
+	for i, v := range keys {
+		k[i] = v
+	}
 	conn := c.pool.Get()
 	defer conn.Close()
-	return err(conn.Do("UNLINK", key))
+	return err(conn.Do("UNLINK", k...))
 }
 
 // SAdd ...
