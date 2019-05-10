@@ -75,8 +75,13 @@ type RedisTestServer struct {
 
 // NewRedisTestServer ...
 func NewRedisTestServer() *RedisTestServer {
+	// check redis-server binary is in PATH
 	_, err := exec.LookPath("redis-server")
 	check(err)
+	// check no Redis instance is already running
+	if _, err := redis.Dial("tcp", ":6379"); err == nil {
+		panic("a Redis instance is already running")
+	}
 	return &RedisTestServer{
 		cmd: exec.Command("redis-server", "--save", "\"\""),
 	}
