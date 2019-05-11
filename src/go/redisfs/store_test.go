@@ -26,74 +26,81 @@ func TestLayout(t *testing.T) {
 	stripeSize := int64(1024)
 
 	// all in one stripe, starting at 0
-	s := stripeLayout(stripeSize, 0, 500)
+	data := make([]byte, 500)
+	s := stripeLayout(stripeSize, 0, data)
 	util.Equals(t, len(s), 1, "Nb of stripe error")
 
-	if s[0].id != 0 || s[0].off != 0 || s[0].len != 500 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 0 || s[0].off != 0 || len(s[0].data) != 500 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
 
 	// all in one stripe, starting at 500
-	s = stripeLayout(stripeSize, 500, 500)
+	data = make([]byte, 500)
+	s = stripeLayout(stripeSize, 500, data)
 	util.Equals(t, len(s), 1, "Nb of stripe error")
 
-	if s[0].id != 0 || s[0].off != 500 || s[0].len != 500 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 0 || s[0].off != 500 || len(s[0].data) != 500 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
 
 	// taking exactly one stripe
-	s = stripeLayout(stripeSize, 0, 1024)
+	data = make([]byte, 1024)
+	s = stripeLayout(stripeSize, 0, data)
 	util.Equals(t, len(s), 1, "Nb of stripe error")
 
-	if s[0].id != 0 || s[0].off != 0 || s[0].len != 1024 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 0 || s[0].off != 0 || len(s[0].data) != 1024 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
 
 	// taking one stripe + 1 byte
-	s = stripeLayout(stripeSize, 0, 1025)
+	data = make([]byte, 1025)
+	s = stripeLayout(stripeSize, 0, data)
 	util.Equals(t, len(s), 2, "Nb of stripe error")
 
-	if s[0].id != 0 || s[0].off != 0 || s[0].len != 1024 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 0 || s[0].off != 0 || len(s[0].data) != 1024 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
-	if s[1].id != 1 || s[1].off != 0 || s[1].len != 1 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, s[1].len)
+	if s[1].id != 1 || s[1].off != 0 || len(s[1].data) != 1 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, len(s[1].data))
 	}
 
 	// taking exactly two stripe
-	s = stripeLayout(stripeSize, 0, 2048)
+	data = make([]byte, 2048)
+	s = stripeLayout(stripeSize, 0, data)
 	util.Equals(t, len(s), 2, "Nb of stripe error")
 
-	if s[0].id != 0 || s[0].off != 0 || s[0].len != 1024 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 0 || s[0].off != 0 || len(s[0].data) != 1024 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
-	if s[1].id != 1 || s[1].off != 0 || s[1].len != 1024 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, s[1].len)
+	if s[1].id != 1 || s[1].off != 0 || len(s[1].data) != 1024 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, len(s[1].data))
 	}
 
 	// spanning two stripes
-	s = stripeLayout(stripeSize, 500, 1000)
+	data = make([]byte, 1000)
+	s = stripeLayout(stripeSize, 500, data)
 	util.Equals(t, len(s), 2, "Nb of stripe error")
 
-	if s[0].id != 0 || s[0].off != 500 || s[0].len != 524 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 0 || s[0].off != 500 || len(s[0].data) != 524 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
-	if s[1].id != 1 || s[1].off != 0 || s[1].len != 476 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, s[1].len)
+	if s[1].id != 1 || s[1].off != 0 || len(s[1].data) != 476 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, len(s[1].data))
 	}
 
 	// spanning three stripes, starting on second one, one byte on fourth stripe
-	s = stripeLayout(stripeSize, 1024, 2049)
+	data = make([]byte, 2049)
+	s = stripeLayout(stripeSize, 1024, data)
 	util.Equals(t, len(s), 3, "Nb of stripe error")
 
-	if s[0].id != 1 || s[0].off != 0 || s[0].len != 1024 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, s[0].len)
+	if s[0].id != 1 || s[0].off != 0 || len(s[0].data) != 1024 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[0].id, s[0].off, len(s[0].data))
 	}
-	if s[1].id != 2 || s[1].off != 0 || s[1].len != 1024 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, s[1].len)
+	if s[1].id != 2 || s[1].off != 0 || len(s[1].data) != 1024 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[1].id, s[1].off, len(s[1].data))
 	}
-	if s[2].id != 3 || s[2].off != 0 || s[2].len != 1 {
-		t.Errorf("error in stripe data: id %d, off %d, len %d", s[2].id, s[2].off, s[2].len)
+	if s[2].id != 3 || s[2].off != 0 || len(s[2].data) != 1 {
+		t.Errorf("error in stripe data: id %d, off %d, len %d", s[2].id, s[2].off, len(s[2].data))
 	}
 }
 
@@ -162,6 +169,24 @@ func TestReadEmpty(t *testing.T) {
 	readData := make([]byte, 1000, 1000)
 	n := store.ReadAt("myfile", 0, readData)
 	util.Equals(t, int64(0), n, "number of byte read should be 0")
+}
+
+func TestGetSize(t *testing.T) {
+	redis, conf := util.InitRedisTestServer()
+	defer redis.Stop()
+
+	store := NewDataStore(NewRedisRing(conf), 100)
+	defer store.Close()
+
+	data := bytes.Repeat([]byte("0123456789"), 500) // 5000 bytes
+	store.WriteAt("myfile", 0, data)
+
+	readData := make([]byte, len(data), len(data))
+	store.ReadAt("myfile", 0, readData)
+	util.Equals(t, data, readData, "read data is different from written data")
+
+	s := store.GetSize("myfile")
+	util.Equals(t, int64(len(data)), s, "size is incorrect")
 }
 
 func TestResize(t *testing.T) {
