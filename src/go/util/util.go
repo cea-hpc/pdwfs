@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -70,7 +71,8 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 
 // RedisTestServer ...
 type RedisTestServer struct {
-	cmd *exec.Cmd
+	cmd  *exec.Cmd
+	port int
 }
 
 // NewRedisTestServer ...
@@ -78,12 +80,17 @@ func NewRedisTestServer() *RedisTestServer {
 	// check redis-server binary is in PATH
 	_, err := exec.LookPath("redis-server")
 	check(err)
-	// check no Redis instance is already running
-	if _, err := redis.Dial("tcp", ":6379"); err == nil {
-		panic("a Redis instance is already running")
+	port := 6379
+	for {
+		// find a free port
+		if _, err := redis.Dial("tcp", fmt.Sprintf(":%d", port)); err == nil {
+			port++
+		}
+		break
 	}
 	return &RedisTestServer{
-		cmd: exec.Command("redis-server", "--save", "\"\""),
+		cmd:  exec.Command("redis-server", "--save", "\"\"", "--port", strconv.Itoa(port)),
+		port: port,
 	}
 }
 
@@ -92,7 +99,7 @@ func (r *RedisTestServer) Start() {
 	try(r.cmd.Start())
 	time.Sleep(50 * time.Millisecond)
 	for {
-		if conn, err := redis.Dial("tcp", ":6379"); err == nil {
+		if conn, err := redis.Dial("tcp", fmt.Sprintf(":%d", r.port)); err == nil {
 			conn.Close()
 			return
 		}
@@ -112,7 +119,7 @@ func InitRedisTestServer() (*RedisTestServer, *config.Redis) {
 	server := NewRedisTestServer()
 	server.Start()
 	conf := config.NewRedisConf()
-	conf.Addrs = []string{":6379"}
+	conf.Addrs = []string{fmt.Sprintf(":%d", server.port)}
 	return server, conf
 }
 
