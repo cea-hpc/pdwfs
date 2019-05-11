@@ -69,6 +69,8 @@ func NewRedisClient(addr string) *RedisClient {
 	return &RedisClient{
 		pool: &redis.Pool{
 			MaxIdle:     3,
+			MaxActive:   50,
+			Wait:        true,
 			IdleTimeout: 240 * time.Second,
 			Dial: func() (redis.Conn, error) {
 				return redis.Dial("tcp", addr)
