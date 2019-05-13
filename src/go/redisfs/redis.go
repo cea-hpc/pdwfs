@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/cea-hpc/pdwfs/config"
+	"github.com/cea-hpc/pdwfs/redigo/redis"
 	"github.com/cea-hpc/pdwfs/util"
-	"github.com/gomodule/redigo/redis"
 )
 
 var (

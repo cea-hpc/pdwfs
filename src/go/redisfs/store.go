@@ -22,7 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gomodule/redigo/redis"
+	"github.com/cea-hpc/pdwfs/redigo/redis"
 )
 
 // helpers functions

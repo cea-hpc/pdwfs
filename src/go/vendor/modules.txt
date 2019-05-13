@@ -1,3 +1,0 @@
-# github.com/gomodule/redigo v2.0.0+incompatible
-github.com/gomodule/redigo/redis
-github.com/gomodule/redigo/internal

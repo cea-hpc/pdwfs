@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cea-hpc/pdwfs/config"
-	"github.com/gomodule/redigo/redis"
+	"github.com/cea-hpc/pdwfs/redigo/redis"
 )
 
 // error checking helpers
