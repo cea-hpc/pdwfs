@@ -1,3 +1,13 @@
+# Note by JCapul - 05/13/2019
+
+I am integrating redigo into pdwfs main code base.
+
+For performance reason we need to have a Redis client that allows receiving large strings (GET and GETRANGE) into a user provided buffer to avoid the cost of additional data copies.
+
+Redigo seems to be a fairly simple Redis Go client that I can easily modify to suit this requirement.
+
+I could have done a fork on Github but since it is not supporting yet Go Modules and there seem to be complicated stuff going-on ([issue336](https://github.com/gomodule/redigo/issues/366)), I am "hard-vendoring" it for the moment.
+
 Redigo
 ======
 
