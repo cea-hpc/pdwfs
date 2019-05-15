@@ -44,21 +44,6 @@ func err(a interface{}, err error) error {
 	return err
 }
 
-// IRedisClient ...
-type IRedisClient interface {
-	Close() error
-	SetRange(key string, offset int64, data []byte) error
-	GetRange(key string, start, end int64) ([]byte, error)
-	Exists(key string) (bool, error)
-	Set(key string, data []byte) error
-	SetNX(key string, data []byte) error
-	Get(key string) ([]byte, error)
-	Unlink(key string) error
-	SAdd(key string, member string) error
-	SRem(key string, member string) error
-	SMembers(key string) ([]string, error)
-}
-
 // RedisClient is a client to a single Redis instance, safe to use by multiple goroutines
 type RedisClient struct {
 	pool *redis.Pool
@@ -167,6 +152,30 @@ func (c *RedisClient) SMembers(key string) ([]string, error) {
 	return redis.Strings(conn.Do("SMEMBERS", key))
 }
 
+// Pipe wraps the Redis pipeline feature of redigo
+type Pipe struct {
+	conn redis.Conn
+}
+
+// Do registers new commands in the pipeline
+func (p Pipe) Do(cmd string, args ...interface{}) {
+	Try(p.conn.Send(cmd, args...))
+}
+
+// Flush flushes all pipeline commands to Redis
+func (p Pipe) Flush() {
+	defer p.conn.Close()
+	_, err := p.conn.Do("EXEC")
+	Check(err)
+}
+
+// Pipeline returns a Pipe instance
+func (c *RedisClient) Pipeline() *Pipe {
+	conn := c.pool.Get()
+	conn.Send("MULTI")
+	return &Pipe{conn}
+}
+
 // RedisRing ...
 type RedisRing struct {
 	clients map[string]*RedisClient
@@ -209,54 +218,4 @@ func (r *RedisRing) Close() error {
 		err = client.Close()
 	}
 	return err
-}
-
-// SetRange ...
-func (r *RedisRing) SetRange(key string, offset int64, data []byte) error {
-	return r.GetClient(key).SetRange(key, offset, data)
-}
-
-// GetRange ...
-func (r *RedisRing) GetRange(key string, start, end int64) ([]byte, error) {
-	return r.GetClient(key).GetRange(key, start, end)
-}
-
-// Exists ...
-func (r *RedisRing) Exists(key string) (bool, error) {
-	return r.GetClient(key).Exists(key)
-}
-
-// Set ...
-func (r *RedisRing) Set(key string, data []byte) error {
-	return r.GetClient(key).Set(key, data)
-}
-
-// SetNX ...
-func (r *RedisRing) SetNX(key string, data []byte) error {
-	return r.GetClient(key).SetNX(key, data)
-}
-
-// Get ...
-func (r *RedisRing) Get(key string) ([]byte, error) {
-	return r.GetClient(key).Get(key)
-}
-
-// Unlink ...
-func (r *RedisRing) Unlink(key string) error {
-	return r.GetClient(key).Unlink(key)
-}
-
-// SAdd ...
-func (r *RedisRing) SAdd(key string, member string) error {
-	return r.GetClient(key).SAdd(key, member)
-}
-
-// SRem ...
-func (r *RedisRing) SRem(key string, member string) error {
-	return r.GetClient(key).SRem(key, member)
-}
-
-// SMembers ...
-func (r *RedisRing) SMembers(key string) ([]string, error) {
-	return r.GetClient(key).SMembers(key)
 }

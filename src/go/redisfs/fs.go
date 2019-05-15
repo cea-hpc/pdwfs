@@ -69,25 +69,24 @@ const PathSeparator = "/"
 type RedisFS struct {
 	mountConf *config.Mount
 	dataStore *DataStore
-	metaStore IRedisClient
+	redisRing *RedisRing
 	inodes    map[string]*Inode
 	root      *Inode
 }
 
 // NewRedisFS a new RedisFS filesystem which entirely resides in memory
 func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
-	redisClient := NewRedisRing(redisConf)
-	dataStore := NewDataStore(redisClient, int64(mountConf.StripeSize))
-	metaStore := redisClient
+	redisRing := NewRedisRing(redisConf)
+	dataStore := NewDataStore(redisRing, int64(mountConf.StripeSize))
 
 	// create root inode
 	//FIXME: mount path (root) should only be created it it exists on the FS at startup
-	root := NewInode(mountConf, dataStore, metaStore, mountConf.Path)
+	root := NewInode(dataStore, redisRing, mountConf.Path)
 	root.initMeta(true, 0600)
 
 	return &RedisFS{
 		mountConf: mountConf,
-		metaStore: metaStore,
+		redisRing: redisRing,
 		dataStore: dataStore,
 		inodes:    map[string]*Inode{root.Path(): root},
 		root:      root,
@@ -96,7 +95,7 @@ func NewRedisFS(redisConf *config.Redis, mountConf *config.Mount) *RedisFS {
 
 // Finalize performs close up actions on the virtual file system
 func (fs *RedisFS) Finalize() {
-	fs.metaStore.Close()
+	fs.redisRing.Close()
 	fs.dataStore.Close()
 }
 
@@ -113,7 +112,7 @@ func (fs *RedisFS) ValidatePath(path string) error {
 }
 
 func (fs *RedisFS) createInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
-	i := NewInode(fs.mountConf, fs.dataStore, fs.metaStore, path)
+	i := NewInode(fs.dataStore, fs.redisRing, path)
 	i.initMeta(dir, mode)
 	parent.setChild(i)
 	fs.inodes[i.Path()] = i
@@ -124,8 +123,8 @@ func (fs *RedisFS) getInode(path string) (*Inode, bool) {
 	if i, ok := fs.inodes[path]; ok {
 		return i, true
 	}
-	i := NewInode(fs.mountConf, fs.dataStore, fs.metaStore, path)
-	if ok, _ := i.exists(); !ok {
+	i := NewInode(fs.dataStore, fs.redisRing, path)
+	if ok := i.exists(); !ok {
 		return nil, false
 	}
 	fs.inodes[i.Path()] = i

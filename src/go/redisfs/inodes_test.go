@@ -32,26 +32,22 @@ func TestInodeMeta(t *testing.T) {
 	store := NewDataStore(ring, int64(confMount.StripeSize))
 	defer store.Close()
 
-	i := NewInode(confMount, store, ring, "id")
+	i := NewInode(store, ring, "id")
 
-	res, err := i.exists()
-	util.Ok(t, err)
+	res := i.exists()
 	util.Equals(t, false, res, "no metadata expected")
 
 	i.initMeta(true, 0600)
 
-	res, err = i.exists()
-	util.Ok(t, err)
+	res = i.exists()
 	util.Equals(t, true, res, "metadata expected")
 
 	i.initMeta(false, 0777) // should be a no op
 
 	d := i.IsDir()
-	util.Ok(t, err)
 	util.Equals(t, d, true, "should be a dir")
 
 	m := i.Mode()
-	util.Ok(t, err)
 	util.Equals(t, m, os.FileMode(0600), "should be 0600 mode")
 
 	i.delMeta()

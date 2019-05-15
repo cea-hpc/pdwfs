@@ -40,21 +40,21 @@ func divmod(n, d int64) (q, r int64) {
 
 // DataStore uses multiple Redis instances (ring) to store flat sequences of bytes stripped accross instances
 type DataStore struct {
-	ring       *RedisRing
+	redisRing  *RedisRing
 	stripeSize int64
 }
 
 // NewDataStore returns a DataStore struct instance
 func NewDataStore(ring *RedisRing, stripeSize int64) *DataStore {
 	return &DataStore{
-		ring:       ring,
+		redisRing:  ring,
 		stripeSize: stripeSize,
 	}
 }
 
 // Close the Redis clients in the ring
 func (s DataStore) Close() error {
-	return s.ring.Close()
+	return s.redisRing.Close()
 }
 
 type stripeInfo struct {
@@ -95,36 +95,25 @@ loop:
 func (s DataStore) writeStripe(name string, stripe stripeInfo, wg *sync.WaitGroup) {
 	defer wg.Done()
 	stripeKey := key(name, stripe.id)
-	client := s.ring.GetClient(stripeKey)
-	conn := client.pool.Get()
-	defer conn.Close()
-
-	// uses Redis pipeline feature MULTI/EXEC
-	conn.Send("MULTI")
-	conn.Send("SADD", name+":stripes", stripe.id)
+	pipeline := s.redisRing.GetClient(stripeKey).Pipeline()
+	pipeline.Do("SADD", name+":stripes", stripe.id)
 	if stripe.off == 0 && int64(len(stripe.data)) == s.stripeSize {
 		// SET is faster than SETRANGE
-		conn.Send("SET", stripeKey, stripe.data)
+		pipeline.Do("SET", stripeKey, stripe.data)
 	} else {
-		conn.Send("SETRANGE", stripeKey, stripe.off, stripe.data)
+		pipeline.Do("SETRANGE", stripeKey, stripe.off, stripe.data)
 	}
-	_, err := conn.Do("EXEC")
-	Check(err)
+	pipeline.Flush()
 }
 
 // erases the stripe from its instance
 func (s DataStore) removeStripe(name string, id int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	stripeKey := key(name, id)
-	client := s.ring.GetClient(stripeKey)
-	conn := client.pool.Get()
-	defer conn.Close()
-
-	conn.Send("MULTI")
-	conn.Send("SREM", name+":stripes", id)
-	conn.Send("UNLINK", stripeKey)
-	_, err := conn.Do("EXEC")
-	Check(err)
+	pipeline := s.redisRing.GetClient(stripeKey).Pipeline()
+	pipeline.Do("SREM", name+":stripes", id)
+	pipeline.Do("UNLINK", stripeKey)
+	pipeline.Flush()
 }
 
 // reads stripe data from its Redis instance, copy the data into the destination buffer
@@ -132,19 +121,17 @@ func (s DataStore) removeStripe(name string, id int64, wg *sync.WaitGroup) {
 func (s DataStore) readStripe(name string, stripe stripeInfo, wg *sync.WaitGroup, read *int64) {
 	defer wg.Done()
 	stripeKey := key(name, stripe.id)
-	client := s.ring.GetClient(stripeKey)
-	conn := client.pool.Get()
-	defer conn.Close()
+	client := s.redisRing.GetClient(stripeKey)
 
 	var res []byte
 	var err error
 	size := int64(len(stripe.data))
 	if stripe.off == 0 && size == s.stripeSize {
-		res, err = redis.Bytes(conn.Do("GET", stripeKey))
+		res, err = client.Get(stripeKey)
 	} else {
-		res, err = redis.Bytes(conn.Do("GETRANGE", stripeKey, stripe.off, stripe.off+size-1))
+		res, err = client.GetRange(stripeKey, stripe.off, stripe.off+size-1)
 	}
-	if err != nil && err != redis.ErrNil {
+	if err != nil && err != ErrRedisKeyNotFound {
 		panic(err)
 	}
 	// copy res into destination data buffer and atomically increment the number of bytes read
@@ -159,7 +146,7 @@ var trimStripeScript = redis.NewScript(1, `
 func (s DataStore) trimStripe(name string, id int64, size int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	stripeKey := key(name, id)
-	client := s.ring.GetClient(stripeKey)
+	client := s.redisRing.GetClient(stripeKey)
 	conn := client.pool.Get()
 	defer conn.Close()
 
@@ -210,9 +197,9 @@ func (s DataStore) Remove(name string) {
 
 // gather from all Redis instances the list of stripes keyed by 'name' and returns the highest stripe ID
 func (s DataStore) searchLastStripe(name string) int64 {
-	retChan := make(chan int64, len(s.ring.clients))
+	retChan := make(chan int64, len(s.redisRing.clients))
 	wg := sync.WaitGroup{}
-	for _, client := range s.ring.clients {
+	for _, client := range s.redisRing.clients {
 		wg.Add(1)
 		go func(c *RedisClient, wg *sync.WaitGroup, ch chan int64) {
 			defer wg.Done()
@@ -232,7 +219,7 @@ func (s DataStore) searchLastStripe(name string) int64 {
 	wg.Wait()
 	var n int64
 	max := int64(-1)
-	for i := 0; i < len(s.ring.clients); i++ {
+	for i := 0; i < len(s.redisRing.clients); i++ {
 		n = <-retChan
 		if n > max {
 			max = n
@@ -247,7 +234,8 @@ func (s DataStore) GetSize(name string) int64 {
 	if ilast < 0 {
 		return 0
 	}
-	lastStripe, err := s.ring.Get(key(name, ilast))
+	key := key(name, ilast)
+	lastStripe, err := s.redisRing.GetClient(key).Get(key)
 	Check(err)
 	return ilast*s.stripeSize + int64(len(lastStripe))
 }

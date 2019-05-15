@@ -15,94 +15,71 @@
 package redisfs
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/cea-hpc/pdwfs/config"
 )
 
 //Inode object
 type Inode struct {
-	mountConf   *config.Mount
-	dataStore   *DataStore
-	metaStore   IRedisClient
-	path        string
-	metaBaseKey string
-	isDir       *bool
-	mode        *os.FileMode
-	mtx         *sync.RWMutex
+	dataStore *DataStore
+	redisRing *RedisRing
+	path      string
+	keyPrefix string
+	mtx       *sync.RWMutex
 }
 
 //NewInode ...
-func NewInode(mountConf *config.Mount, dataStore *DataStore, metaStore IRedisClient, path string) *Inode {
+func NewInode(dataStore *DataStore, ring *RedisRing, path string) *Inode {
 	return &Inode{
-		mountConf:   mountConf,
-		dataStore:   dataStore,
-		metaStore:   metaStore,
-		path:        path,
-		mtx:         &sync.RWMutex{},
-		metaBaseKey: "{" + path + "}", // curly braces define the key to use for hashing such that all metadata keys goes on the same instance
+		dataStore: dataStore,
+		redisRing: ring,
+		path:      path,
+		mtx:       &sync.RWMutex{},
+		keyPrefix: "{" + path + "}", // key prefix is in curly braces to ensure all metadata keys goes on the same instance (see RedisRing)
 	}
 }
 
-func (i *Inode) exists() (bool, error) {
-	if i.mode != nil {
-		return true, nil
-	}
-	return i.metaStore.Exists(i.metaBaseKey + ":mode")
+func (i *Inode) exists() bool {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	ret, err := client.Exists(i.keyPrefix + ":mode")
+	Check(err)
+	return ret
 }
 
 func (i *Inode) initMeta(isDir bool, mode os.FileMode) {
-	// FIXME: use Redis pipeline
+	pipeline := i.redisRing.GetClient(i.keyPrefix).Pipeline()
 	if isDir {
-		Try(i.metaStore.SetNX(i.metaBaseKey+":isDir", []byte("1")))
-	} else {
-		Try(i.metaStore.SetNX(i.metaBaseKey+":isDir", []byte("0")))
+		pipeline.Do("SADD", i.keyPrefix+":children", "")
 	}
-
-	Try(i.metaStore.SetNX(i.metaBaseKey+":mode", []byte(strconv.FormatInt(int64(mode), 10))))
+	pipeline.Do("SETNX", i.keyPrefix+":mode", []byte(strconv.FormatInt(int64(mode), 10)))
+	pipeline.Flush()
 }
 
 func (i *Inode) delMeta() {
-	// FIXME: use Redis pipeline with multiple keys
-	Try(i.metaStore.Unlink(i.metaBaseKey + ":children"))
-	Try(i.metaStore.Unlink(i.metaBaseKey + ":isDir"))
-	Try(i.metaStore.Unlink(i.metaBaseKey + ":mode"))
+	pipeline := i.redisRing.GetClient(i.keyPrefix).Pipeline()
+	pipeline.Do("UNLINK", i.keyPrefix+":children")
+	pipeline.Do("UNLINK", i.keyPrefix+":mode")
+	pipeline.Flush()
 }
 
 //IsDir ...
 func (i *Inode) IsDir() bool {
-	if i.isDir == nil {
-		key := i.metaBaseKey + ":isDir"
-		res, err := i.metaStore.Get(key)
-		if err != nil && err == ErrRedisKeyNotFound {
-			panic(fmt.Errorf("key '%s' not found", key))
-		}
-		Check(err)
-		isDir := string(res[0]) == "1"
-		i.isDir = &isDir
-	}
-	return (*i.isDir)
+	client := i.redisRing.GetClient(i.keyPrefix)
+	res, err := client.Exists(i.keyPrefix + ":children")
+	Check(err)
+	return res
 }
 
 //Mode returns the inode access mode
 func (i *Inode) Mode() os.FileMode {
-	if i.mode == nil {
-		key := i.metaBaseKey + ":mode"
-		val, err := i.metaStore.Get(key)
-		if err != nil && err == ErrRedisKeyNotFound {
-			panic(fmt.Errorf("key '%s' not found", key))
-		}
-		Check(err)
-		res, err := strconv.ParseInt(string(val), 10, 64)
-		Check(err)
-		m := os.FileMode(res)
-		i.mode = &m
-	}
-	return (*i.mode)
+	client := i.redisRing.GetClient(i.keyPrefix)
+	val, err := client.Get(i.keyPrefix + ":mode")
+	Check(err)
+	res, err := strconv.ParseInt(string(val), 10, 64)
+	Check(err)
+	return os.FileMode(res)
 }
 
 //Path returns the Path of the file
@@ -133,29 +110,28 @@ func (i *Inode) Size() int64 {
 	return i.dataStore.GetSize(i.path)
 }
 
-func (i *Inode) childrenPath() []string {
-	res, err := i.metaStore.SMembers(i.metaBaseKey + ":children")
-	Check(err)
-	return res
+func (i *Inode) setChild(child *Inode) {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	Try(client.SAdd(i.keyPrefix+":children", child.Path()))
 }
 
-func (i *Inode) setChild(child *Inode) error {
-	return i.metaStore.SAdd(i.metaBaseKey+":children", child.Path())
-}
-
-func (i *Inode) removeChild(child *Inode) error {
-	return i.metaStore.SRem(i.metaBaseKey+":children", child.Path())
+func (i *Inode) removeChild(child *Inode) {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	Try(client.SRem(i.keyPrefix+":children", child.Path()))
 }
 
 func (i *Inode) getChildren() ([]*Inode, error) {
 	if !i.IsDir() {
 		return nil, ErrNotDirectory
 	}
-	paths, err := i.metaStore.SMembers(i.metaBaseKey + ":children")
+	client := i.redisRing.GetClient(i.keyPrefix)
+	paths, err := client.SMembers(i.keyPrefix + ":children")
 	Check(err)
-	children := make([]*Inode, 0, len(paths))
+	children := make([]*Inode, 0, len(paths)-1)
 	for _, path := range paths {
-		children = append(children, NewInode(i.mountConf, i.dataStore, i.metaStore, path))
+		if path != "" {
+			children = append(children, NewInode(i.dataStore, i.redisRing, path))
+		}
 	}
 	return children, nil
 }
