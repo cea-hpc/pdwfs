@@ -78,7 +78,11 @@ static int pdwfs_fprintf(FILE* stream, const char* color, const char *cat, const
 
 //-----------------------------------------------------------------------------------------
 // mount_register
+//
+// used to register pdwfs mount points and check if a filename belongs to one of the mount point
+// if not, the call is passed to the system libc call
 
+// callback when a key is removed from the hash table
 void mount_key_removed(gpointer key) {
     g_free(key);
 }
@@ -91,6 +95,7 @@ void free_mount_register(GHashTable *self) {
     g_hash_table_destroy(self);
 }
 
+// register pdwfs mount points into the hash table
 void register_mounts(GHashTable *self, gchar **mounts) {
     int i = 0;
     gchar* mount = mounts[0];
@@ -103,10 +108,12 @@ void register_mounts(GHashTable *self, gchar **mounts) {
     }
 }
 
+// lookup function used in g_hash_table_find
 gboolean finder(gpointer mount, gpointer unused, gpointer abspath) {
     return g_str_has_prefix(abspath, mount);
 }
 
+// returns 1 if the path in argument belongs to one of the mount points registered
 int contains_path(GHashTable *self, const char *path) {
     
     char *apath = abspath(path);
@@ -118,13 +125,17 @@ int contains_path(GHashTable *self, const char *path) {
     return (item_ptr) ? 1 : 0;    
 }
 
-// mount_register
+// end of mount_register
 //-----------------------------------------------------------------------------------------
 
 
 //-----------------------------------------------------------------------------------------
 // fd_register
+//
+// when a newly created file is managed by pdwfs, the fd_register creates a "twin" local temporary file
+// to provide a valid system file descriptor or valid FILE stream object
 
+// callback when a key is removed
 void fd_key_removed(gpointer fd_ptr) {
     close(GPOINTER_TO_INT(fd_ptr));
 }
@@ -137,12 +148,14 @@ void free_fd_register(GHashTable *self) {
     g_hash_table_destroy(self);
 }
 
+// returns a new FILE stream object and registers its file descriptor
 FILE* get_new_stream(GHashTable *self) {
     FILE *fp = tmpfile();
     g_hash_table_insert(self, GINT_TO_POINTER(fileno(fp)), GINT_TO_POINTER(0));
     return fp;
 }
 
+// returns a new file descriptor and registers it
 int get_new_fd(GHashTable *self) {
     return fileno(get_new_stream(self));
 }
@@ -155,14 +168,14 @@ int contains_fd(GHashTable *self, int fd) {
     return g_hash_table_contains(self, GINT_TO_POINTER(fd));    
 }
 
-// fd_register
+// end of fd_register
 //-----------------------------------------------------------------------------------------
 
 
 static int pdwfs_initialized = 0;
 // there are cases where pdwfs is not yet initialized and a another library constructor
 // (called before pdwfs.so constructor) does some IO (e.g libselinux, libnuma)
-// in such case we cannot cross the cgo layer to check if the file/fd is managed by pdwfs, 
+// in such case we do not know yet if the file/fd is managed by pdwfs, 
 // so we defer the call to the real system calls (there's hardly any chance that these IOs 
 // calls are the one we intend to intercept anyway)
 
@@ -175,6 +188,7 @@ static __attribute__((constructor)) void init_pdwfs(void) {
     InitPdwfs(mounts_buf);
 
     mount_register = new_mount_register();
+    // parse the list of mount point paths obtained from the Go layer
     gchar **mounts = g_strsplit((char*)mounts_buf.data, "@", -1);
     register_mounts(mount_register, mounts);
     g_strfreev(mounts);

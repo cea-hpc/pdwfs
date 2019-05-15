@@ -22,13 +22,14 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/gomodule/redigo/redis"
 )
+
+// error checking helpers
 
 func try(err error) {
 	if err != nil {
@@ -69,13 +70,13 @@ func Equals(tb testing.TB, exp, act interface{}, msg string) {
 	}
 }
 
-// RedisTestServer ...
+// RedisTestServer used to running tests
 type RedisTestServer struct {
 	cmd  *exec.Cmd
 	port int
 }
 
-// NewRedisTestServer ...
+// NewRedisTestServer returns a RedisTestServer instance with an available port (not yet started)
 func NewRedisTestServer() *RedisTestServer {
 	// check redis-server binary is in PATH
 	_, err := exec.LookPath("redis-server")
@@ -94,7 +95,7 @@ func NewRedisTestServer() *RedisTestServer {
 	}
 }
 
-// Start ...
+// Start the Redis server, make sure its up and running
 func (r *RedisTestServer) Start() {
 	try(r.cmd.Start())
 	time.Sleep(50 * time.Millisecond)
@@ -106,7 +107,11 @@ func (r *RedisTestServer) Start() {
 	}
 }
 
-// Stop ...
+// Stop the Redis server process
+// FIXME: this call is used in defer statements in all tests to make sure the server is stopped
+// after each test, however this is not always happening and the server stays up after some test failures
+// which is annoying for the subsequent tests as it leads to uncontrolled behaviour...probably better to revert
+// to miniredis
 func (r *RedisTestServer) Stop() {
 	if err := r.cmd.Process.Signal(os.Interrupt); err != nil {
 		panic(err)
@@ -114,7 +119,7 @@ func (r *RedisTestServer) Stop() {
 	r.cmd.Wait()
 }
 
-//InitRedisTestServer returns a new miniredis server
+//InitRedisTestServer returns a new Redis test server with its configuration for clients
 func InitRedisTestServer() (*RedisTestServer, *config.Redis) {
 	server := NewRedisTestServer()
 	server.Start()

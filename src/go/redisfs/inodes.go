@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// The Inode layer manages inodes as either regular files or a directories and associated metadata.
+// The metadata is reduced the bare minimum on purpose (to reduce bottlenecks of handling metadata).
 
 package redisfs
 
@@ -30,7 +33,7 @@ type Inode struct {
 	mtx       *sync.RWMutex
 }
 
-//NewInode ...
+//NewInode returns a new Inode object
 func NewInode(dataStore *DataStore, ring *RedisRing, path string) *Inode {
 	return &Inode{
 		dataStore: dataStore,
@@ -41,6 +44,7 @@ func NewInode(dataStore *DataStore, ring *RedisRing, path string) *Inode {
 	}
 }
 
+// check if the inode object already exists in pdwfs (check in Redis)
 func (i *Inode) exists() bool {
 	client := i.redisRing.GetClient(i.keyPrefix)
 	ret, err := client.Exists(i.keyPrefix + ":mode")
@@ -48,6 +52,7 @@ func (i *Inode) exists() bool {
 	return ret
 }
 
+// creates the metadata in Redis of a newly created Inode in pdwfs
 func (i *Inode) initMeta(isDir bool, mode os.FileMode) {
 	pipeline := i.redisRing.GetClient(i.keyPrefix).Pipeline()
 	if isDir {
@@ -57,15 +62,15 @@ func (i *Inode) initMeta(isDir bool, mode os.FileMode) {
 	pipeline.Flush()
 }
 
+// delete the metadata from Redis
 func (i *Inode) delMeta() {
-	pipeline := i.redisRing.GetClient(i.keyPrefix).Pipeline()
-	pipeline.Do("UNLINK", i.keyPrefix+":children")
-	pipeline.Do("UNLINK", i.keyPrefix+":mode")
-	pipeline.Flush()
+	client := i.redisRing.GetClient(i.keyPrefix)
+	Try(client.Unlink(i.keyPrefix+":children", i.keyPrefix+":mode"))
 }
 
-//IsDir ...
+//IsDir returns true if inode is a directory
 func (i *Inode) IsDir() bool {
+	//FIXME: cache the query
 	client := i.redisRing.GetClient(i.keyPrefix)
 	res, err := client.Exists(i.keyPrefix + ":children")
 	Check(err)
@@ -110,16 +115,19 @@ func (i *Inode) Size() int64 {
 	return i.dataStore.GetSize(i.path)
 }
 
+// records a child inode to the current inode
 func (i *Inode) setChild(child *Inode) {
 	client := i.redisRing.GetClient(i.keyPrefix)
 	Try(client.SAdd(i.keyPrefix+":children", child.Path()))
 }
 
+// removes a child inode from the current inode children list
 func (i *Inode) removeChild(child *Inode) {
 	client := i.redisRing.GetClient(i.keyPrefix)
 	Try(client.SRem(i.keyPrefix+":children", child.Path()))
 }
 
+// returns a list of children inodes
 func (i *Inode) getChildren() ([]*Inode, error) {
 	if !i.IsDir() {
 		return nil, ErrNotDirectory
@@ -136,6 +144,7 @@ func (i *Inode) getChildren() ([]*Inode, error) {
 	return children, nil
 }
 
+// returns a File object wrapping the current inode
 func (i *Inode) getFile(flag int) (File, error) {
 	if i.IsDir() {
 		return nil, ErrIsDirectory
@@ -163,6 +172,7 @@ func (i *Inode) getFile(flag int) (File, error) {
 	return f, nil
 }
 
+// removes the current inode (file content, children, metadata)
 func (i *Inode) remove() {
 	if !i.IsDir() {
 		i.dataStore.Remove(i.path)

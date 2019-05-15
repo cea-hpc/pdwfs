@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Main entry points into Go code of pdwfs.
+// This file contains exported functions to the C layer of pdwfs
 
 package main
 
@@ -49,6 +52,8 @@ var (
 	errFdInUse          = errors.New("file descriptor already used")
 )
 
+// helpers for error checking
+
 func try(err error) {
 	if err != nil {
 		panic(err)
@@ -57,7 +62,9 @@ func try(err error) {
 
 var check = try
 
-//PdwFS is a virtual filesystem object built on top of github.com/cea-hpc/pdwfs/redisfs
+// PdwFS manages multiple redisfs mount points and keeps a map of opened fd <-> opened redisfs.File.
+// This map is used to translate I/O calls coming from the C layer and addressed by a system file descriptor
+// to pdwfs implementation of Files (redisfs.File).
 type PdwFS struct {
 	mounts    map[string]*redisfs.RedisFS
 	conf      *config.Pdwfs
@@ -66,7 +73,7 @@ type PdwFS struct {
 	lock      sync.RWMutex
 }
 
-//NewPdwFS returns a pdwfs virtual filesystem
+//NewPdwFS returns a new PdwFS instance with newly created redisfs mount points based on configuration info
 func NewPdwFS(conf *config.Pdwfs) *PdwFS {
 	if len(conf.Mounts) == 0 {
 		panic("No mount path specified...")
@@ -83,6 +90,7 @@ func NewPdwFS(conf *config.Pdwfs) *PdwFS {
 	}
 }
 
+// parse a filename to return the correponding mount point if found
 func (fs *PdwFS) getMount(filename string) (*redisfs.RedisFS, error) {
 	if filename == "" {
 		//short-circuit filepath.Abs as Abs behaviour is to return working directory on empty string
@@ -101,6 +109,7 @@ func (fs *PdwFS) getMount(filename string) (*redisfs.RedisFS, error) {
 	return nil, nil
 }
 
+// register a new redisfs.File and its associated system file descriptor
 func (fs *PdwFS) registerFile(fd int, redisFile *redisfs.File) error {
 	if _, ok := fs.fdFileMap[fd]; ok {
 		return errFdInUse
@@ -109,6 +118,7 @@ func (fs *PdwFS) registerFile(fd int, redisFile *redisfs.File) error {
 	return nil
 }
 
+// remove a file descriptor and its associated redisfs.File
 func (fs *PdwFS) removeFd(fd int) error {
 	if _, ok := fs.fdFileMap[fd]; !ok {
 		return errInvalidFd
@@ -131,10 +141,14 @@ func (fs *PdwFS) finalize() {
 }
 
 // ----------------Exported to C ----------------
+// function below are exported to the C layer using cgo system
 
 var pdwfs *PdwFS
 
-// InitPdwfs is called once when pdwfs.so library is loaded (gcc constructor attribute)
+// InitPdwfs is called only once when pdwfs.so library is loaded (gcc constructor attribute).
+// The mountBuf argument is used to communicate the list of mount points back to the C layer.
+// The C layer uses the mount points information for its own triage of filename (pdwfs I/O calls vs libc I/O calls).
+// This is necessary as the configuration mechanism is in the Go layer.
 //export InitPdwfs
 func InitPdwfs(mountBuf []byte) {
 	conf := config.New()
@@ -143,12 +157,13 @@ func InitPdwfs(mountBuf []byte) {
 	}
 	pdwfs = NewPdwFS(conf)
 
+	// writes in mountBuf the mount point paths
 	b := bytes.NewBuffer(mountBuf)
 	for path := range pdwfs.mounts {
 		b.WriteString(path)
-		b.WriteString("@")
+		b.WriteString("@") // separator
 	}
-	b.WriteString("\000") // null-terminated
+	b.WriteString("\000") // end sentinel
 }
 
 // FinalizePdwfs is called once when pdwfs.so library is unloaded (gcc destructor attribute)

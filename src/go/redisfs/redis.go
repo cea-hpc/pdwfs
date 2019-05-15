@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Redis client and clients ring implementations
 
 package redisfs
 
@@ -53,9 +55,9 @@ type RedisClient struct {
 func NewRedisClient(addr string) *RedisClient {
 	return &RedisClient{
 		pool: &redis.Pool{
-			MaxIdle:     3,
-			MaxActive:   50,
-			Wait:        true,
+			MaxIdle:     5,
+			MaxActive:   50,   // max active connection at the same time
+			Wait:        true, // throttles goroutines to MaxActive goroutines
 			IdleTimeout: 240 * time.Second,
 			Dial: func() (redis.Conn, error) {
 				return redis.Dial("tcp", addr)
@@ -64,19 +66,21 @@ func NewRedisClient(addr string) *RedisClient {
 	}
 }
 
-// Close ...
+// Close the connection pool
 func (c *RedisClient) Close() error {
 	return c.pool.Close()
 }
 
-// SetRange ...
+// the following methods implements some type-safe and concurrent-safe Redis commands
+
+// SetRange command
 func (c *RedisClient) SetRange(key string, offset int64, data []byte) error {
 	conn := c.pool.Get()
 	defer conn.Close()
 	return err(conn.Do("SETRANGE", key, offset, data))
 }
 
-// GetRange ...
+// GetRange command
 func (c *RedisClient) GetRange(key string, start, end int64) ([]byte, error) {
 	conn := c.pool.Get()
 	defer conn.Close()
@@ -87,28 +91,28 @@ func (c *RedisClient) GetRange(key string, start, end int64) ([]byte, error) {
 	return b, err
 }
 
-// Exists ...
+// Exists command
 func (c *RedisClient) Exists(key string) (bool, error) {
 	conn := c.pool.Get()
 	defer conn.Close()
 	return redis.Bool(conn.Do("EXISTS", key))
 }
 
-// Set ...
+// Set command
 func (c *RedisClient) Set(key string, data []byte) error {
 	conn := c.pool.Get()
 	defer conn.Close()
 	return err(conn.Do("SET", key, data))
 }
 
-// SetNX ...
+// SetNX command
 func (c *RedisClient) SetNX(key string, data []byte) error {
 	conn := c.pool.Get()
 	defer conn.Close()
 	return err(conn.Do("SETNX", key, data))
 }
 
-// Get ...
+// Get command
 func (c *RedisClient) Get(key string) ([]byte, error) {
 	conn := c.pool.Get()
 	defer conn.Close()
@@ -119,7 +123,7 @@ func (c *RedisClient) Get(key string) ([]byte, error) {
 	return b, err
 }
 
-// Unlink ...
+// Unlink command
 func (c *RedisClient) Unlink(keys ...string) error {
 	// convert slice of string in slice of interface{} ref: https://golang.org/doc/faq#convert_slice_of_interface
 	k := make([]interface{}, len(keys))
@@ -131,21 +135,21 @@ func (c *RedisClient) Unlink(keys ...string) error {
 	return err(conn.Do("UNLINK", k...))
 }
 
-// SAdd ...
+// SAdd command
 func (c *RedisClient) SAdd(key string, member string) error {
 	conn := c.pool.Get()
 	defer conn.Close()
 	return err(conn.Do("SADD", key, member))
 }
 
-// SRem ...
+// SRem command
 func (c *RedisClient) SRem(key string, member string) error {
 	conn := c.pool.Get()
 	defer conn.Close()
 	return err(conn.Do("SREM", key, member))
 }
 
-// SMembers ...
+// SMembers command
 func (c *RedisClient) SMembers(key string) ([]string, error) {
 	conn := c.pool.Get()
 	defer conn.Close()
@@ -157,7 +161,7 @@ type Pipe struct {
 	conn redis.Conn
 }
 
-// Do registers new commands in the pipeline
+// Do registers a new command in the pipeline
 func (p Pipe) Do(cmd string, args ...interface{}) {
 	Try(p.conn.Send(cmd, args...))
 }
@@ -176,13 +180,13 @@ func (c *RedisClient) Pipeline() *Pipe {
 	return &Pipe{conn}
 }
 
-// RedisRing ...
+// RedisRing manages multiple Redis instances and use consistent hashing to distribute the load
 type RedisRing struct {
 	clients map[string]*RedisClient
 	hash    *util.ConsistentHash
 }
 
-// NewRedisRing ...
+// NewRedisRing returns a new RedisRing instance
 func NewRedisRing(conf *config.Redis) *RedisRing {
 
 	ids := make([]string, len(conf.Addrs))
@@ -200,7 +204,9 @@ func NewRedisRing(conf *config.Redis) *RedisRing {
 	}
 }
 
-// GetClient ...
+// GetClient returns a client from the ring based on a key
+// if the key has curly braces in it (e.g "{mydirectory}/file"), only the string within the braces is used
+// in the hasing process to get a client
 func (r *RedisRing) GetClient(key string) *RedisClient {
 	k := key
 	if s := strings.IndexByte(key, '{'); s > -1 {
@@ -211,7 +217,7 @@ func (r *RedisRing) GetClient(key string) *RedisClient {
 	return r.clients[r.hash.Get(k)]
 }
 
-// Close ...
+// Close all clients in the ring
 func (r *RedisRing) Close() error {
 	var err error
 	for _, client := range r.clients {
