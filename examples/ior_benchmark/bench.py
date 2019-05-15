@@ -36,7 +36,7 @@ def run_bench(api, version):
     bench_title = api + " IOR benchmark - pdwfs " + version + " - " + str(datetime.utcnow()) + " UTC"
     print "Running:", bench_title
 
-    read = "0"        # 1: perform read benchmark
+    read = "1"        # 1: perform read benchmark
     numTasks="2"      # number of parallel processes
     filePerProc="0"   # 1: write one file per processes
     collective="1"    # 1: enable collective IO operations (MPIIO, HDF5 only)
@@ -57,11 +57,17 @@ def run_bench(api, version):
     os.rename("/output/ior_pdwfs.out", "/output/ior_" + api + "_pdwfs-" + version + ".out")
 
     matplotlib.use('Agg')
-    filename = "ior_" + api + "_pdwfs-" + version + ".png"
-    utils.plot_results(df_disk, df_pdwfs, title=bench_title, filename="/output/" + filename)
-
-    with open("/output/bench.html", "a") as f:
-        f.write("<img src=" + filename + ">\n")
+    
+    for readOrWrite in ["write", "read"]:
+        filename = readOrWrite + "_ior_" + api + "_pdwfs-" + version + ".png"
+        utils.plot_results(
+            readOrWrite, 
+            df_disk[df_disk["Operation"] == readOrWrite], 
+            df_pdwfs[df_pdwfs["Operation"] == readOrWrite], 
+            title=bench_title, 
+            filename="/output/" + filename)
+        with open("/output/bench.html", "a") as f:
+            f.write("<img src=" + filename + ">\n")
 
 if __name__ == '__main__':
 

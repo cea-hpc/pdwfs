@@ -45,25 +45,28 @@ def parse_ior_results(filename):
     return pandas.read_csv(filename, sep='\s+', skiprows=start_line, nrows=end_line-start_line)
 
 
-def plot_results(df_disk, df_pdwfs, title=None, filename=None):
+def plot_results(readOrWrite, df_disk, df_pdwfs, title=None, filename=None):
     """
     Plot max write rate vs transfer size
     """
     plt.style.use("ggplot")
 
     plt.xlabel("Transfer Size (MiB)")
-    plt.ylabel("Measured Write Rate (MiB/s)")
-    prefix = "IOR Write Rate Test Results"
+    plt.ylabel("Measured " + readOrWrite + " Rate (MiB/s)")
+    prefix = "IOR " + readOrWrite + " Rate Test Results"
     title = prefix + " - " + title if title else prefix 
     plt.title(title)
 
     fig = plt.gcf()
     fig.set_size_inches(16, 6.5)
 
-    plt.plot(df_disk["xsize"] / 1.e6, df_disk["Max(MiB)"],'-o',label="disk")
     plt.plot(df_pdwfs["xsize"] / 1.e6, df_pdwfs["Max(MiB)"],'-o',label="pdwfs")
-
-    plt.legend(["disk","pdwfs"],loc="upper right")
+    if readOrWrite == "write":
+        # plot only "write" results on disk, "read" results on disk are "polluted" by caching in RAM 
+        plt.plot(df_disk["xsize"] / 1.e6, df_disk["Max(MiB)"],'-o',label="disk")
+        plt.legend(["pdwfs", "disk"],loc="upper right")  
+    else:
+        plt.legend(["pdwfs"],loc="upper right")
 
     if filename:
         plt.savefig(filename)
