@@ -15,33 +15,10 @@
 package util
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/gomodule/redigo/redis"
 )
-
-func TestSplitPath(t *testing.T) {
-	const PathSeperator = "/"
-	if p := SplitPath("/", PathSeperator); !reflect.DeepEqual(p, []string{""}) {
-		t.Errorf("Invalid path: %q", p)
-	}
-	if p := SplitPath("./test", PathSeperator); !reflect.DeepEqual(p, []string{".", "test"}) {
-		t.Errorf("Invalid path: %q", p)
-	}
-	if p := SplitPath(".", PathSeperator); !reflect.DeepEqual(p, []string{"."}) {
-		t.Errorf("Invalid path: %q", p)
-	}
-	if p := SplitPath("test", PathSeperator); !reflect.DeepEqual(p, []string{".", "test"}) {
-		t.Errorf("Invalid path: %q", p)
-	}
-	if p := SplitPath("/usr/src/linux/", PathSeperator); !reflect.DeepEqual(p, []string{"", "usr", "src", "linux"}) {
-		t.Errorf("Invalid path: %q", p)
-	}
-	if p := SplitPath("usr/src/linux/", PathSeperator); !reflect.DeepEqual(p, []string{".", "usr", "src", "linux"}) {
-		t.Errorf("Invalid path: %q", p)
-	}
-}
 
 func TestRedisTestServer(t *testing.T) {
 	server := NewRedisTestServer()
