@@ -17,7 +17,7 @@ package util
 import (
 	"testing"
 
-	"github.com/gomodule/redigo/redis"
+	"github.com/cea-hpc/pdwfs/redigo/redis"
 )
 
 func TestRedisTestServer(t *testing.T) {

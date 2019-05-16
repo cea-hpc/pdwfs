@@ -43,6 +43,9 @@ type Conn interface {
 
 	// Receive receives a single reply from the Redis server
 	Receive() (reply interface{}, err error)
+
+	SetReadBuffer(dst []byte)
+	UnsetReadBuffer()
 }
 
 // Argument is the interface implemented by an object which wants to control how

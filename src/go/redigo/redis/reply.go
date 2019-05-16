@@ -189,6 +189,26 @@ func Bytes(reply interface{}, err error) ([]byte, error) {
 	return nil, fmt.Errorf("redigo: unexpected type for Bytes, got type %T", reply)
 }
 
+// ReadBytes is a helper that converts a command reply to the number of bytes read.
+func ReadBytes(reply interface{}, err error) (int, error) {
+	if err != nil {
+		return -1, err
+	}
+	switch reply := reply.(type) {
+	case []byte:
+		return len(reply), nil
+	case string:
+		return len(reply), nil
+	case int:
+		return reply, nil
+	case nil:
+		return -1, ErrNil
+	case Error:
+		return -1, reply
+	}
+	return -1, fmt.Errorf("redigo: unexpected type for Bytes, got type %T", reply)
+}
+
 // Bool is a helper that converts a command reply to a boolean. If err is not
 // equal to nil, then Bool returns false, err. Otherwise Bool converts the
 // reply to boolean as follows:

@@ -22,7 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gomodule/redigo/redis"
+	"github.com/cea-hpc/pdwfs/redigo/redis"
 )
 
 // helpers functions
@@ -123,19 +123,19 @@ func (s DataStore) readStripe(name string, stripe stripeInfo, wg *sync.WaitGroup
 	stripeKey := key(name, stripe.id)
 	client := s.redisRing.GetClient(stripeKey)
 
-	var res []byte
+	var n int
 	var err error
 	size := int64(len(stripe.data))
 	if stripe.off == 0 && size == s.stripeSize {
-		res, err = client.Get(stripeKey)
+		n, err = client.GetInto(stripeKey, stripe.data)
 	} else {
-		res, err = client.GetRange(stripeKey, stripe.off, stripe.off+size-1)
+		n, err = client.GetRangeInto(stripeKey, stripe.off, stripe.off+size-1, stripe.data)
 	}
 	if err != nil && err != ErrRedisKeyNotFound {
 		panic(err)
 	}
 	// copy res into destination data buffer and atomically increment the number of bytes read
-	atomic.AddInt64(read, int64(copy(stripe.data, res)))
+	atomic.AddInt64(read, int64(n))
 }
 
 var trimStripeScript = redis.NewScript(1, `

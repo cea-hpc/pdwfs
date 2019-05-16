@@ -44,6 +44,7 @@ type conn struct {
 	// Read
 	readTimeout time.Duration
 	br          *bufio.Reader
+	dst         []byte
 
 	// Write
 	writeTimeout time.Duration
@@ -80,6 +81,7 @@ type dialOptions struct {
 	dial         func(network, addr string) (net.Conn, error)
 	db           int
 	password     string
+	clientName   string
 	useTLS       bool
 	skipVerify   bool
 	tlsConfig    *tls.Config
@@ -138,6 +140,14 @@ func DialDatabase(db int) DialOption {
 func DialPassword(password string) DialOption {
 	return DialOption{func(do *dialOptions) {
 		do.password = password
+	}}
+}
+
+// DialClientName specifies a client name to be used
+// by the Redis server connection.
+func DialClientName(name string) DialOption {
+	return DialOption{func(do *dialOptions) {
+		do.clientName = name
 	}}
 }
 
@@ -219,6 +229,13 @@ func Dial(network, address string, options ...DialOption) (Conn, error) {
 
 	if do.password != "" {
 		if _, err := c.Do("AUTH", do.password); err != nil {
+			netConn.Close()
+			return nil, err
+		}
+	}
+
+	if do.clientName != "" {
+		if _, err := c.Do("CLIENT", "SETNAME", do.clientName); err != nil {
 			netConn.Close()
 			return nil, err
 		}
@@ -427,10 +444,21 @@ func (pe protocolError) Error() string {
 	return fmt.Sprintf("redigo: %s (possible server error or unsupported concurrent read by application)", string(pe))
 }
 
+// readLine reads a line of input from the RESP stream.
 func (c *conn) readLine() ([]byte, error) {
+	// To avoid allocations, attempt to read the line using ReadSlice. This
+	// call typically succeeds. The known case where the call fails is when
+	// reading the output from the MONITOR command.
 	p, err := c.br.ReadSlice('\n')
 	if err == bufio.ErrBufferFull {
-		return nil, protocolError("long response line")
+		// The line does not fit in the bufio.Reader's buffer. Fall back to
+		// allocating a buffer for the line.
+		buf := append([]byte{}, p...)
+		for err == bufio.ErrBufferFull {
+			p, err = c.br.ReadSlice('\n')
+			buf = append(buf, p...)
+		}
+		p = buf
 	}
 	if err != nil {
 		return nil, err
@@ -500,6 +528,27 @@ var (
 	pongReply interface{} = "PONG"
 )
 
+func (c *conn) SetReadBuffer(buf []byte) {
+	c.dst = buf
+}
+
+func (c *conn) UnsetReadBuffer() {
+	c.dst = nil
+}
+
+func (c *conn) readBulkString(dst []byte) (int, error) {
+	read, err := io.ReadFull(c.br, dst)
+	if err != nil {
+		return read, err
+	}
+	if line, err := c.readLine(); err != nil {
+		return read, err
+	} else if len(line) != 0 {
+		return read, protocolError("bad bulk string format")
+	}
+	return read, nil
+}
+
 func (c *conn) readReply() (interface{}, error) {
 	line, err := c.readLine()
 	if err != nil {
@@ -529,17 +578,16 @@ func (c *conn) readReply() (interface{}, error) {
 		if n < 0 || err != nil {
 			return nil, err
 		}
-		p := make([]byte, n)
-		_, err = io.ReadFull(c.br, p)
-		if err != nil {
-			return nil, err
+		if c.dst == nil {
+			p := make([]byte, n)
+			_, err := c.readBulkString(p)
+			return p, err
 		}
-		if line, err := c.readLine(); err != nil {
-			return nil, err
-		} else if len(line) != 0 {
-			return nil, protocolError("bad bulk string format")
+		// use the destination buffer
+		if len(c.dst) < n {
+			return nil, protocolError("destination buffer is too small")
 		}
-		return p, nil
+		return c.readBulkString(c.dst[:n])
 	case '*':
 		n, err := parseLen(line[1:])
 		if n < 0 || err != nil {
