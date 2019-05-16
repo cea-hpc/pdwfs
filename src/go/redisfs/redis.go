@@ -91,6 +91,21 @@ func (c *RedisClient) GetRange(key string, start, end int64) ([]byte, error) {
 	return b, err
 }
 
+// GetRangeInto implements GETRANGE redis command with an input destination buffer to read bytes into.
+// The actual number of bytes read is returned.
+// If dst is too small, it will panic.
+func (c *RedisClient) GetRangeInto(key string, start, end int64, dst []byte) (int, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+	conn.SetReadBuffer(dst)
+	defer conn.UnsetReadBuffer()
+	read, err := redis.ReadBytes(conn.Do("GETRANGE", key, start, end))
+	if err == redis.ErrNil {
+		return 0, ErrRedisKeyNotFound
+	}
+	return read, err
+}
+
 // Exists command
 func (c *RedisClient) Exists(key string) (bool, error) {
 	conn := c.pool.Get()
@@ -121,6 +136,21 @@ func (c *RedisClient) Get(key string) ([]byte, error) {
 		return b, ErrRedisKeyNotFound
 	}
 	return b, err
+}
+
+// GetInto implements GET redis command with an input destination buffer to read bytes into.
+// The actual number of bytes read is returned.
+// If dst is too small, it will panic.
+func (c *RedisClient) GetInto(key string, dst []byte) (int, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+	conn.SetReadBuffer(dst)
+	defer conn.UnsetReadBuffer()
+	read, err := redis.ReadBytes(conn.Do("GET", key))
+	if err == redis.ErrNil {
+		return 0, ErrRedisKeyNotFound
+	}
+	return read, err
 }
 
 // Unlink command
