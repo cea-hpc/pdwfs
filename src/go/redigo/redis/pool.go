@@ -558,6 +558,16 @@ func (ac *activeConn) ReceiveWithTimeout(timeout time.Duration) (reply interface
 	return cwt.ReceiveWithTimeout(timeout)
 }
 
+func (ac *activeConn) SetReadBuffer(dst []byte) {
+	pc := ac.pc
+	pc.c.SetReadBuffer(dst)
+}
+
+func (ac *activeConn) UnsetReadBuffer() {
+	pc := ac.pc
+	pc.c.UnsetReadBuffer()
+}
+
 type errorConn struct{ err error }
 
 func (ec errorConn) Do(string, ...interface{}) (interface{}, error) { return nil, ec.err }
@@ -570,6 +580,8 @@ func (ec errorConn) Close() error                                          { ret
 func (ec errorConn) Flush() error                                          { return ec.err }
 func (ec errorConn) Receive() (interface{}, error)                         { return nil, ec.err }
 func (ec errorConn) ReceiveWithTimeout(time.Duration) (interface{}, error) { return nil, ec.err }
+func (ec errorConn) SetReadBuffer([]byte)                                  { return }
+func (ec errorConn) UnsetReadBuffer()                                      { return }
 
 type idleList struct {
 	count       int

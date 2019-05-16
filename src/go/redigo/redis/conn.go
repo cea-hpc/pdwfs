@@ -44,6 +44,7 @@ type conn struct {
 	// Read
 	readTimeout time.Duration
 	br          *bufio.Reader
+	dst         []byte
 
 	// Write
 	writeTimeout time.Duration
@@ -527,6 +528,27 @@ var (
 	pongReply interface{} = "PONG"
 )
 
+func (c *conn) SetReadBuffer(buf []byte) {
+	c.dst = buf
+}
+
+func (c *conn) UnsetReadBuffer() {
+	c.dst = nil
+}
+
+func (c *conn) readBulkString(dst []byte) (int, error) {
+	read, err := io.ReadFull(c.br, dst)
+	if err != nil {
+		return read, err
+	}
+	if line, err := c.readLine(); err != nil {
+		return read, err
+	} else if len(line) != 0 {
+		return read, protocolError("bad bulk string format")
+	}
+	return read, nil
+}
+
 func (c *conn) readReply() (interface{}, error) {
 	line, err := c.readLine()
 	if err != nil {
@@ -556,17 +578,16 @@ func (c *conn) readReply() (interface{}, error) {
 		if n < 0 || err != nil {
 			return nil, err
 		}
-		p := make([]byte, n)
-		_, err = io.ReadFull(c.br, p)
-		if err != nil {
-			return nil, err
+		if c.dst == nil {
+			p := make([]byte, n)
+			_, err := c.readBulkString(p)
+			return p, err
 		}
-		if line, err := c.readLine(); err != nil {
-			return nil, err
-		} else if len(line) != 0 {
-			return nil, protocolError("bad bulk string format")
+		// use the destination buffer
+		if len(c.dst) < n {
+			return nil, protocolError("destination buffer is too small")
 		}
-		return p, nil
+		return c.readBulkString(c.dst[:n])
 	case '*':
 		n, err := parseLen(line[1:])
 		if n < 0 || err != nil {

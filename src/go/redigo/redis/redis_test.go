@@ -41,6 +41,8 @@ func (tc timeoutTestConn) Send(string, ...interface{}) error { return nil }
 func (tc timeoutTestConn) Err() error                        { return nil }
 func (tc timeoutTestConn) Close() error                      { return nil }
 func (tc timeoutTestConn) Flush() error                      { return nil }
+func (tc timeoutTestConn) SetReadBuffer([]byte)              { return }
+func (tc timeoutTestConn) UnsetReadBuffer()                  { return }
 
 func testTimeout(t *testing.T, c redis.Conn) {
 	r, err := c.Do("PING")
