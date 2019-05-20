@@ -30,7 +30,7 @@ cleanup_session() {
 }
 
 fail() {
-	msg=$1
+	local msg=$1
 	if [[ -n "$msg" ]]; then
 		echo "$msg"
 	fi
@@ -84,7 +84,7 @@ shift
 
 if [ "$command" == init ]; then
 
-	usage_init="Usage: $(basename "$0") init [-hNip]
+	usage_init="Usage: $(basename "$0") init [-hNnpi]
 
 	Initialize a new pdwfs session by launching multiple Redis instances
 	on compute nodes and creating a session environment file to be sourced.
@@ -95,17 +95,20 @@ if [ "$command" == init ]; then
 	where:
 		-h	show this help
 		-N	number of nodes (default: 1)
-		-i	number of Redis instances per node (default: 1)
-		-p	port of central Redis instance (default: 6379)"
+		-n	number of Redis instances PER node (default: 1)
+		-p	port of central Redis instance (default: 34000)
+		-i	network interface on which Redis servers shall bind to (default to first from `hostname -I`)"
 
-	while getopts ':hN:i:p:' opt; do
+	while getopts ':hN:n:p:i:' opt; do
 		case "$opt" in
 		h)  echo "$usage_init"
 			exit
 			;;
 		N)  nNodes=$OPTARG
 			;;
-		i)	nInstances=$OPTARG
+		n)	nInstances=$OPTARG
+			;;
+		i)	nic=$OPTARG
 			;;
 		p)	port=$OPTARG
 			;;
@@ -118,11 +121,12 @@ if [ "$command" == init ]; then
 		esac
 	done
 	shift "$((OPTIND - 1))"
-
+	
 	# normalize options
 	if [[ -z "$nNodes" ]]; then nNodes=1; fi
 	if [[ -z "$nInstances" ]]; then nInstances=1; fi
-	if [[ -z "$port" ]]; then port=6379; fi
+	if [[ -z "$port" ]]; then port=34000; fi
+	if [[ -z "$nic" ]]; then nic="default"; fi
 
 	# cleanup previous session if any
 	cleanup_session
@@ -142,7 +146,7 @@ if [ "$command" == init ]; then
 	fi
 
 	# launch the remote instances
-	srun -N $nNodes -n $nNodes -c $nInstances --exclusive --mem=0 redis.srun -i $nInstances $CENTRAL_REDIS &
+	srun -N $nNodes -n $nNodes -c $nInstances --exclusive --mem=0 redis.srun -i $nic -n $nInstances $CENTRAL_REDIS &
 	if [[ "$?" != "0" ]]; then
 		fail "[PDWFS][init] Error: failed to launch the remote Redis instances"
 	fi
@@ -156,7 +160,7 @@ if [ "$command" == init ]; then
 	# create session environment file
 	cat > $SESSION_FILE << EOF
 export PDWFS_CENTRAL_REDIS=$CENTRAL_REDIS
-export PDWFS_REDIS=`redis-cli -u redis://$PDWFS_CENTRAL_REDIS smembers addr | tr -s '[:space:]' ','`
+export PDWFS_REDIS=`redis-cli -u redis://$CENTRAL_REDIS smembers addr | tr -s '[:space:]' ','`
 export PDWFS_TOTAL_INSTANCES=$totalInstances
 EOF
 	

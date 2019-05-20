@@ -15,24 +15,27 @@
 # limitations under the License.
 
 
-usage="Usage: $(basename "$0") [-hnv] ADDR
+usage="Usage: $(basename "$0") [-hvni] ADDR
 
 Launch and manage multiple Redis instances on local host
 
 where:
     -h      show this help
     -v      verbose
-    -i      number of Redis instances to launch (default: 1)
+    -n      number of Redis instances to launch (default: 1)
+    -i      network interface to bind Redis server to
     ADDR    address (host:port) of central Redis instance gathering information of other instances"
 
-while getopts ':hvi:' opt; do
+while getopts ':hvn:i:' opt; do
     case "$opt" in
     h)  echo "$usage"
         exit
         ;;
     v)  verbose=1
         ;;
-    i)  nInstances=$OPTARG
+    n)  nInstances=$OPTARG
+        ;;
+    i)  nic=$OPTARG
         ;;
     :)  printf "Error: missing argument for -%s\n" "$OPTARG"
         echo "$usage"
@@ -58,31 +61,52 @@ fi
 
 centralRedis=$*
 
+get-ip() {
+    local nic=$1
+    local ip=""
+    if [[ "$nic" == "default" ]]; then
+        # no network interface specified, pick the first one
+        ip=`hostname -I | awk '{print $1}'`
+    else
+        # get the IP from the specified network interface
+        ip=`ip -4 addr show $nic | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1`
+    fi
+    if [[ "$ip" == "" ]]; then
+        echo "Error, no ip address found for NIC: $nic"
+        exit 1
+    fi
+    echo $ip
+}
+
 stop-redis() {
-    port=$1
-	addr=`hostname`:$port
+    local port=$1
+    local nic=$2
+    ip=`get-ip $nic`
+	addr=$ip:$port
     if [[ -n "$verbose" ]]; then
 	    echo "[PDWFS] Stopping Redis instance on $addr"
     fi
-    redis-cli -p $port shutdown
+    redis-cli -h $ip -p $port shutdown
 	redis-cli -u redis://$centralRedis srem addr $addr > /dev/null
     redis-cli -u redis://$centralRedis rpush waitkey 1 > /dev/null
 }
 
 start-redis() {
-    port=$1
-	addr=`hostname`:$port
+    local port=$1
+    local nic=$2
+    ip=`get-ip $nic`
+    addr=$ip:$port
     if [[ -n "$verbose" ]]; then
 	    echo "[PDWFS] Starting Redis instance on $addr"
     fi
-    redis-server --daemonize yes --save "" --protected-mode no --port $port > /dev/null
+    redis-server --daemonize yes --save "" --protected-mode no --bind $ip --port $port > /dev/null
 	redis-cli -u redis://$centralRedis sadd addr $addr > /dev/null
     redis-cli -u redis://$centralRedis rpush waitkey 1 > /dev/null
 }
 
 # start local Redis instances
 for ((port=6379;port<6379+$nInstances;port++)); do
-    start-redis $port
+    start-redis $port $nic
 done
 
 # block until order received from central Redis instance
@@ -90,6 +114,6 @@ redis-cli -u redis://$centralRedis brpoplpush order order 0 > /dev/null
 
 # stop local Redis instances
 for ((port = 6379; port < 6379 + $nInstances; port++)); do
-    stop-redis $port
+    stop-redis $port $nic
 done
 
