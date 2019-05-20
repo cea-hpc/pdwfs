@@ -1,6 +1,6 @@
 BUILDDIR=../../build
 
-GO_FILES = $(wildcard config/*.go) $(wildcard redisfs/*.go) 
+GO_FILES = $(shell find . -type f -name '*.go') 
 
 $(BUILDDIR)/lib/libpdwfs_go.so: $(GO_FILES)
 	go build -mod=vendor -o $@ -buildmode=c-shared
