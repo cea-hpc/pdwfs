@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.0
+
+- Add Spack package for pdwfs [b6cb1f2]
+- Update README.md [1e062df]
+- Add an example for using pdwfs with SLURM job scheduler [b2839c1]
+- Update SLURM helpers scripts [3aca9ae]
+- Increase default stripe size to 50MB [9907704]
+- Merge branch 'feature/custom-redigo-client' into develop [6705d0c]
+- Fix performance issues on write and read [8a54135]
+- Optimize write with Redis Set cmd if whole buffer is to be written (faster) [bd34304]
+- Refactor tests to improve isolation and avoid need for running Redis beforehand [9ea7596]
+- Refactor the C layer to move all "triage" into C layer and minimize CGo cross-layer calls [1f53f0c]
+
 ## v0.1.2
 
 - Refactor the inode layer to remove a lock [0b573de]
