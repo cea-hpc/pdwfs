@@ -25,37 +25,53 @@ import (
 	"strings"
 )
 
+// DefaultStripeSize is the default maximum size of file stripe
+const DefaultStripeSize = 50 * 1024 * 1024 // 50MB
+const maxRedisString = 512 * 1024 * 1024   // 512MB
+
+func try(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+var check = try
+
 //Mount point configuration
 type Mount struct {
-	Path          string
-	BlockSize     int
-	WriteParallel bool
-	ReadParallel  bool
+	Path       string
+	StripeSize int
 }
 
 //Redis connection configuration
 type Redis struct {
-	RedisAddrs        []string
-	RedisCluster      bool
-	RedisClusterAddrs []string
+	Addrs        []string
+	Cluster      bool
+	ClusterAddrs []string
+}
+
+// NewRedisConf generates a default configuration
+func NewRedisConf() *Redis {
+	return &Redis{
+		Addrs:        []string{":6379"},
+		Cluster:      false,
+		ClusterAddrs: []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
+	}
+
 }
 
 //Pdwfs configuration
 type Pdwfs struct {
-	Mounts    map[string]*Mount
-	RedisConf *Redis
+	Mounts map[string]*Mount
+	Redis  *Redis
 }
 
 func validateMountPath(path string) string {
 	path, err := filepath.Abs(path)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 	if _, err = os.Stat(path); os.IsExist(err) {
 		entries, err := ioutil.ReadDir(path)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 		if len(entries) != 0 {
 			log.Printf("WARNING mountPath '%s' is not empty, files will not be available for reading through pdwfs", path)
 		}
@@ -66,56 +82,50 @@ func validateMountPath(path string) string {
 //New returns a new config object
 func New() *Pdwfs {
 
-	defaultRedis := Redis{
-		RedisAddrs:        []string{":6379"},
-		RedisCluster:      false,
-		RedisClusterAddrs: []string{":7001", ":7002", ":7003", ":7004", ":7005", ":7006"},
-	}
+	defaultRedis := NewRedisConf()
 
 	conf := Pdwfs{
-		Mounts:    map[string]*Mount{},
-		RedisConf: &defaultRedis,
-	}
-
-	if addrs := os.Getenv("PDWFS_REDIS"); addrs != "" {
-		conf.RedisConf.RedisAddrs = strings.Split(addrs, ",")
-	}
-
-	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
-		mount := Mount{
-			Path:          path,
-			BlockSize:     1 * 1024 * 1024, // 1MB
-			WriteParallel: true,
-			ReadParallel:  true,
-		}
-		conf.Mounts[path] = &mount
-	}
-
-	if blockSize := os.Getenv("PDWFS_BLOCKSIZE"); blockSize != "" {
-		for _, mount := range conf.Mounts {
-			size, err := strconv.Atoi(blockSize)
-			if err != nil {
-				log.Fatalln("Can't convert BlockSize in PDWFS_BLOCKSIZE to int")
-			}
-			mount.BlockSize = size * 1024 * 1024
-			fmt.Println("BlockSize: ", mount.BlockSize)
-		}
+		Mounts: map[string]*Mount{},
+		Redis:  defaultRedis,
 	}
 
 	if confFile := os.Getenv("PDWFS_CONF"); confFile != "" {
 		jsonFile, err := os.Open(confFile)
-		if err != nil {
-			panic(err)
-		}
+		check(err)
 		defer jsonFile.Close()
 		content, _ := ioutil.ReadAll(jsonFile)
-		err = json.Unmarshal([]byte(content), &conf)
-		if err != nil {
-			panic(err)
+		try(json.Unmarshal([]byte(content), &conf))
+	}
+
+	if addrs := os.Getenv("PDWFS_REDIS"); addrs != "" {
+		s := strings.Split(addrs, ",")
+		var a []string
+		for _, i := range s {
+			if i != "" {
+				a = append(a, i)
+			}
+		}
+		conf.Redis.Addrs = a
+	}
+
+	if path := os.Getenv("PDWFS_MOUNTPATH"); path != "" {
+		conf.Mounts[path] = &Mount{
+			Path:       path,
+			StripeSize: DefaultStripeSize,
 		}
 	}
 
-	// Options normalization
+	if stripeSize := os.Getenv("PDWFS_STRIPESIZE"); stripeSize != "" {
+		for _, mount := range conf.Mounts {
+			size, err := strconv.Atoi(stripeSize)
+			if err != nil {
+				log.Fatalln("Can't convert StripeSize in PDWFS_STRIPESIZE to int")
+			}
+			mount.StripeSize = size * 1024 * 1024
+		}
+	}
+
+	// Options verifications and normalization
 
 	if val := os.Getenv("PDWFS_LOGS"); val == "" {
 		log.SetOutput(ioutil.Discard)
@@ -127,8 +137,10 @@ func New() *Pdwfs {
 
 	for path, conf := range conf.Mounts {
 		conf.Path = validateMountPath(path)
-		// NOTE: we may add a different Redis database index per mount point for isolation
-		// (but not suitable with Redis Cluster)
+		if conf.StripeSize > maxRedisString {
+			err := fmt.Sprintf("Mount point '%s' block size (%dMB) is above what Redis can sustain, set block size <= 512MB", path, conf.StripeSize/(1024*1024))
+			panic(err)
+		}
 		normalized[conf.Path] = conf
 	}
 	conf.Mounts = normalized
@@ -137,14 +149,8 @@ func New() *Pdwfs {
 }
 
 // Dump writes the configuration in a JSON file
-func (c *Pdwfs) Dump() error {
+func (c *Pdwfs) Dump() {
 	content, err := json.MarshalIndent(c, "", "    ")
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile("pdwfs.json", content, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
+	check(err)
+	try(ioutil.WriteFile("pdwfs.json", content, 0644))
 }

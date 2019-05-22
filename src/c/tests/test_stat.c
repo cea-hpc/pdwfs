@@ -20,7 +20,7 @@
 #include <sys/stat.h>
 #include "tests.h"
 
-void test_stat() {
+int test_stat() {
 
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -46,9 +46,11 @@ void test_stat() {
 
     close(fd);
     unlink(TESTFILE);
+
+    return 0;
 }
 
-void test_stat_size() {
+int test_stat_size() {
     
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -64,9 +66,6 @@ void test_stat_size() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_stat();
-    test_stat_size();
+    return 0;
 }

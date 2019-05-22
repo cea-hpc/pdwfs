@@ -20,7 +20,7 @@
 #include <strings.h>
 #include "tests.h"
 
-void test_lseek() {
+int test_lseek() {
 
     int fd = open(TESTFILE, O_CREAT|O_RDWR|O_TRUNC, 0777);
     CHECK_ERROR(fd, "open")
@@ -55,9 +55,6 @@ void test_lseek() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-
-int main() {
-    test_lseek();
+    return 0;
 }

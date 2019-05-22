@@ -8,6 +8,7 @@ RUN yum -y update && yum -y install \
 	make \
 	strace \
 	git \
+	glib2-devel \
 	yum clean all
 
 # Go language

@@ -16,7 +16,6 @@
 
 #define _GNU_SOURCE
 
-#include <stdlib.h>
 #include <stdarg.h>
 #include <dlfcn.h>
 #include <string.h>
@@ -28,111 +27,13 @@
 #include <sys/statvfs.h>   
 #include <errno.h>
 #include <fcntl.h>
-#include <dirent.h>
 
+#include <glib.h>
+#include <glib/gprintf.h>
+
+#include "libc.h"
 #include "libpdwfs_go.h"
-
-static int (*real_open)(const char *pathname, int flags, ...) = NULL;
-static int (*real_close)(int fd) = NULL;
-static ssize_t (*real_write)(int fd, const void *buf, size_t count) = NULL;
-static ssize_t (*real_read)(int fd, void *buf, size_t count) = NULL;
-static int (*real_open64)(const char *pathname, int flags, ...) = NULL;
-static int (*real_creat)(const char *pathname, mode_t mode) = NULL;
-static int (*real_creat64)(const char *pathname, mode_t mode) = NULL;
-static int (*real_fdatasync)(int fd) = NULL;
-static int (*real_fsync)(int fd) = NULL;
-static int (*real_ftruncate64)(int fd, off64_t length) = NULL;
-static int (*real_ftruncate)(int fd, off_t length) = NULL;
-static int (*real_truncate64)(const char *path, off64_t length) = NULL;
-static int (*real_truncate)(const char *path, off_t length) = NULL;
-static off64_t (*real_lseek64)(int fd, off64_t offset, int whence) = NULL;
-static off_t (*real_lseek)(int fd, off_t offset, int whence) = NULL;
-static ssize_t (*real_pread)(int fd, void *buf, size_t count, off_t offset) = NULL;
-static ssize_t (*real_pread64)(int fd, void *buf, size_t count, off64_t offset) = NULL;
-static ssize_t (*real_preadv)(int fd, const struct iovec *iov, int iovcnt, off_t offset) = NULL;
-static ssize_t (*real_preadv64)(int fd, const struct iovec *iov, int iovcnt, off64_t offset) = NULL;
-static ssize_t (*real_pwrite)(int fd, const void *buf, size_t count, off_t offset) = NULL;
-static ssize_t (*real_pwrite64)(int fd, const void *buf, size_t count, off64_t offset) = NULL;
-static ssize_t (*real_pwritev)(int fd, const struct iovec *iov, int iovcnt, off_t offset) = NULL;
-static ssize_t (*real_pwritev64)(int fd, const struct iovec *iov, int iovcnt, off64_t offset) = NULL;
-static ssize_t (*real_readv)(int fd, const struct iovec *iov, int iovcnt) = NULL;
-static ssize_t (*real_writev)(int fd, const struct iovec *iov, int iovcnt) = NULL;
-//static int (*real_fcntl)(int fd, int cmd, long arg) = NULL;
-static int (*real_ioctl)(int fd, unsigned long request, void *argp) = NULL;
-
-static int (*real_access)(const char *pathname, int mode) = NULL;
-
-static int (*real_unlink)(const char *pathname) = NULL;
-
-static int (*real___xstat)(int vers, const char *pathname, struct stat *buf) = NULL;
-static int (*real___xstat64)(int vers, const char *pathname, struct stat64 *buf) = NULL;
-static int (*real___lxstat)(int vers, const char *pathname, struct stat *buf) = NULL;
-static int (*real___lxstat64)(int vers, const char *pathname, struct stat64 *buf) = NULL;
-static int (*real___fxstat)(int vers, int fd, struct stat *buf) = NULL;
-static int (*real___fxstat64)(int vers, int fd, struct stat64 *buf) = NULL;
-
-
-static int (*real_statfs)(const char *path, struct statfs *buf) = NULL;
-static int (*real_statfs64)(const char *path, struct statfs64 *buf) = NULL;
-static int (*real_fstatfs)(int fd, struct statfs *buf) = NULL;
-static int (*real_fstatfs64)(int fd, struct statfs64 *buf) = NULL;
-
-static FILE* (*real_fdopen)(int fd, const char *mode) = NULL;
-static FILE* (*real_fopen)(const char *path, const char *mode) = NULL;
-static FILE* (*real_fopen64)(const char *path, const char *mode) = NULL;
-static FILE* (*real_freopen)(const char *path, const char *mode, FILE *stream) = NULL;
-static FILE* (*real_freopen64)(const char *path, const char *mode, FILE *stream) = NULL;
-static int (*real_fclose)(FILE *stream) = NULL;
-static int (*real_fflush)(FILE *stream) = NULL;
-static int (*real_fputc)(int c, FILE *stream) = NULL;
-static char* (*real_fgets)(char *s, int size, FILE *stream) = NULL;
-static int (*real_fgetc)(FILE *stream) = NULL;
-static int (*real_fgetpos)(FILE *stream, fpos_t *pos) = NULL;
-static int (*real_fgetpos64)(FILE *stream, fpos64_t *pos) = NULL;
-static int (*real_fseek)(FILE *stream, long offset, int whence) = NULL;
-static int (*real_fseeko)(FILE *stream, off_t offset, int whence) = NULL;
-static int (*real_fseeko64)(FILE *stream, off64_t offset, int whence) = NULL;
-static int (*real_fsetpos)(FILE *stream, const fpos_t *pos) = NULL;
-static int (*real_fsetpos64)(FILE *stream, const fpos64_t *pos) = NULL;
-static int (*real_fputs)(const char *s, FILE *stream) = NULL;
-static int (*real_putc)(int c, FILE *stream) = NULL;
-static int (*real_getc)(FILE *stream) = NULL;
-static int (*real_ungetc)(int c, FILE *stream) = NULL;
-static long (*real_ftell)(FILE *stream) = NULL;
-static off_t (*real_ftello)(FILE *stream) = NULL;
-static off64_t (*real_ftello64)(FILE *stream) = NULL;
-static size_t (*real_fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) = NULL;
-static size_t (*real_fwrite)(const void *ptr, size_t size, size_t nmemb, FILE *stream) = NULL;
-static int (*real_fprintf)(FILE *stream, const char *fmt, ...) = NULL;
-static void (*real_rewind)(FILE *stream) = NULL;
-
-static int (*real_dup2)(int oldfd, int newfd) = NULL;
-
-static int (*real_unlinkat)(int dirfd, const char *pathname, int flags) = NULL;
-static int (*real_openat)(int dirfd, const char *pathname, int flags, ...) = NULL; 
-static int (*real_faccessat)(int dirfd, const char *pathname, int mode, int flags) = NULL;
-static int (*real___fxstatat)(int vers, int dirfd, const char *pathname, struct stat *buf, int flags) = NULL;
-static int (*real___fxstatat64)(int vers, int dirfd, const char *pathname, struct stat64 *buf, int flags) = NULL;
-static int (*real_mkdir)(const char *pathname, mode_t mode) = NULL;
-static int (*real_mkdirat)(int dirfd, const char *pathname, mode_t mode) = NULL; 
-static int (*real_rmdir)(const char *pathname) = NULL;
-static int (*real_rename)(const char *oldpath, const char *newpath) = NULL;
-static int (*real_renameat)(int olddirfd, const char *oldpath, int newdirfd, const char *newpath) = NULL;
-static int (*real_renameat2)(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags) = NULL;
-static int (*real_posix_fadvise)(int fd, off_t offset, off_t len, int advice) = NULL;
-static int (*real_posix_fadvise64)(int fd, off64_t offset, off64_t len, int advice) = NULL;
-
-static int (*real_statvfs)(const char *pathname, struct statvfs *buf) = NULL;
-static int (*real_statvfs64)(const char *pathname, struct statvfs64 *buf) = NULL;
-static int (*real_fstatvfs)(int fd, struct statvfs *buf) = NULL;
-static int (*real_fstatvfs64)(int fd, struct statvfs64 *buf) = NULL;
-
-static ssize_t (*real_getdelim)(char **buf, size_t *bufsiz, int delimiter, FILE *fp) = NULL;
-static ssize_t (*real_getline)(char **lineptr, size_t *n, FILE *stream) = NULL; 
-static DIR* (*real_opendir)(const char* path) = NULL;
-
-static int (*real_feof)(FILE *stream) = NULL;
-static int (*real_ferror)(FILE *stream) = NULL;
+#include "utils.h"
 
 static int g_do_trace = -1;
 
@@ -163,55 +64,142 @@ static int pdwfs_fprintf(FILE* stream, const char* color, const char *cat, const
 #define DEBUG(fmt, ...) pdwfs_fprintf(stderr, YELLOW, "DEBUG", fmt, ##__VA_ARGS__);
 #define WARNING(fmt, ...) pdwfs_fprintf(stderr, MAGENTA, "WARNING", fmt, ##__VA_ARGS__);
 
-
-static void raise(const char* format, ...) {
-	va_list ap;
-    dprintf(fileno(stderr), "%s[PDWFS][ERROR]%s[C] ", RED, DEFAULT);\
-	va_start(ap, format);
-	vfprintf(stderr, format, ap);
-	va_end(ap);
-}
-
 #define NOT_IMPLEMENTED(symb) {\
-    raise("%s not implemented by pdwfs\n", symb);\
+    pdwfs_fprintf(stderr, RED, "ERROR", "%s not implemented by pdwfs\n", symb);\
     exit(EXIT_FAILURE);\
 }
 
+#define IS_STD_FD(fd) (fd == STDIN_FILENO || fd == STDOUT_FILENO || fd == STDERR_FILENO)
 
-#define CALL_REAL_OP(symb, func, ...) {\
-    if (!func) {\
-        char *error;\
-        dlerror();\
-        func = dlsym(RTLD_NEXT, symb);\
-        if ((error = dlerror()) != NULL)  {\
-            raise("dlsym: %s\n", error);\
-            exit(EXIT_FAILURE);\
-        }\
-        if (! func ) {\
-            raise("symbol not found in dlsym: %s\n", symb);\
-            exit(EXIT_FAILURE);\
-        }\
-    }\
-    return func(__VA_ARGS__);\
+#define PATH_NOT_MANAGED(path) (!pdwfs_initialized || !contains_path(mount_register, path))
+#define FD_NOT_MANAGED(fd) (!pdwfs_initialized || IS_STD_FD(fd) || !contains_fd(fd_register, fd))
+#define STREAM_NOT_MANAGED(stream) FD_NOT_MANAGED(fileno(stream))
+
+
+//-----------------------------------------------------------------------------------------
+// mount_register
+//
+// used to register pdwfs mount points and check if a filename belongs to one of the mount point
+// if not, the call is passed to the system libc call
+
+// callback when a key is removed from the hash table
+void mount_key_removed(gpointer key) {
+    g_free(key);
 }
 
-#define IS_STD_FD(fd) (fd == STDIN_FILENO || fd == STDOUT_FILENO || fd == STDERR_FILENO)
-#define IS_STD_STREAM(s) (s == stdin || s == stdout || s == stderr)
+GHashTable *new_mount_register() {
+    return g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify)mount_key_removed, NULL);
+}
+
+void free_mount_register(GHashTable *self) {
+    g_hash_table_destroy(self);
+}
+
+// register pdwfs mount points into the hash table
+void register_mounts(GHashTable *self, gchar **mounts) {
+    int i = 0;
+    gchar* mount = mounts[0];
+	while (mount != NULL) {
+        if (g_strcmp0(mount, "") !=0) {
+            g_hash_table_insert(self, g_strdup(mount), "");
+        }
+        i++;
+        mount = mounts[i];
+    }
+}
+
+// lookup function used in g_hash_table_find
+gboolean finder(gpointer mount, gpointer unused, gpointer abspath) {
+    return g_str_has_prefix(abspath, mount);
+}
+
+// returns 1 if the path in argument belongs to one of the mount points registered
+int contains_path(GHashTable *self, const char *path) {
+    
+    char *apath = abspath(path);
+    if (!apath) {
+        return 0;
+    }
+    gpointer item_ptr = g_hash_table_find(self, (GHRFunc)finder, apath);
+    free(apath);
+    return (item_ptr) ? 1 : 0;    
+}
+
+// end of mount_register
+//-----------------------------------------------------------------------------------------
+
+
+//-----------------------------------------------------------------------------------------
+// fd_register
+//
+// when a newly created file is managed by pdwfs, the fd_register creates a "twin" local temporary file
+// to provide a valid system file descriptor or valid FILE stream object
+
+// callback when a key is removed
+void fd_key_removed(gpointer fd_ptr) {
+    close(GPOINTER_TO_INT(fd_ptr));
+}
+
+GHashTable *new_fd_register() {
+    return g_hash_table_new_full(g_direct_hash, g_direct_equal, (GDestroyNotify)fd_key_removed, NULL);
+}
+
+void free_fd_register(GHashTable *self) {
+    g_hash_table_destroy(self);
+}
+
+// returns a new FILE stream object and registers its file descriptor
+FILE* get_new_stream(GHashTable *self) {
+    FILE *fp = tmpfile();
+    g_hash_table_insert(self, GINT_TO_POINTER(fileno(fp)), GINT_TO_POINTER(0));
+    return fp;
+}
+
+// returns a new file descriptor and registers it
+int get_new_fd(GHashTable *self) {
+    return fileno(get_new_stream(self));
+}
+
+void remove_fd(GHashTable *self, int fd) {
+    g_hash_table_remove(self, GINT_TO_POINTER(fd));
+}
+
+int contains_fd(GHashTable *self, int fd) {
+    return g_hash_table_contains(self, GINT_TO_POINTER(fd));    
+}
+
+// end of fd_register
+//-----------------------------------------------------------------------------------------
+
 
 static int pdwfs_initialized = 0;
 // there are cases where pdwfs is not yet initialized and a another library constructor
 // (called before pdwfs.so constructor) does some IO (e.g libselinux, libnuma)
-// in such case we cannot cross the cgo layer to check if the file/fd is managed by pdwfs, 
+// in such case we do not know yet if the file/fd is managed by pdwfs, 
 // so we defer the call to the real system calls (there's hardly any chance that these IOs 
 // calls are the one we intend to intercept anyway)
 
+static GHashTable *fd_register = NULL;
+static GHashTable *mount_register = NULL;
+
 static __attribute__((constructor)) void init_pdwfs(void) {
-    InitPdwfs();
+    char buf[1024];
+    GoSlice mounts_buf = {&buf, 0, 1024};
+    InitPdwfs(mounts_buf);
+
+    mount_register = new_mount_register();
+    // parse the list of mount point paths obtained from the Go layer
+    gchar **mounts = g_strsplit((char*)mounts_buf.data, "@", -1);
+    register_mounts(mount_register, mounts);
+    g_strfreev(mounts);
+    fd_register = new_fd_register();
     pdwfs_initialized = 1;
 }
 
 static __attribute__((destructor)) void finalize_pdwfs(void) {
     FinalizePdwfs();
+    free_fd_register(fd_register);
+    free_mount_register(mount_register);
 }
 
 int open(const char *pathname, int flags, ...) {
@@ -227,35 +215,40 @@ int open(const char *pathname, int flags, ...) {
 
     TRACE("intercepting open(pathname=%s, flags=%d, mode=%d)\n", pathname, flags, mode)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc open\n");
-        CALL_REAL_OP("open", real_open, pathname, flags, mode)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_open(pathname, flags, mode);
     }
 
-    int ret = Open(filename, flags, mode);
+    GoString filename = {pathname, strlen(pathname)};
+
+    int fd = get_new_fd(fd_register);
+
+    int ret = Open(filename, flags, mode, fd);
     if (ret < 0) {
         errno = GetErrno();
+        remove_fd(fd_register, fd);
     }
     return ret;
 }
 
+int open64(const char *pathname, int flags, ...) __attribute__((alias("open"))); 
+
 int close(int fd) {
     TRACE("intercepting close(fd=%d)\n", fd)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc close\n");
-        CALL_REAL_OP("close", real_close, fd)
+    if FD_NOT_MANAGED(fd) {
+        return libc_close(fd);
     }
-    return Close(fd);
+    int ret = Close(fd);
+    remove_fd(fd_register, fd);
+    return ret;
 }
 
 ssize_t write(int fd, const void *buf, size_t count) {
     TRACE("intercepting write(fd=%d, buf=%p, count=%lu)\n", fd, buf, count)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc write\n");
-        CALL_REAL_OP("write", real_write, fd, buf, count)
+    if FD_NOT_MANAGED(fd) {
+        return libc_write(fd, buf, count);
     }
     GoSlice buffer = {(void*)buf, count, count};
     return Write(fd, buffer);
@@ -264,67 +257,29 @@ ssize_t write(int fd, const void *buf, size_t count) {
 ssize_t read(int fd, void *buf, size_t count) {
     TRACE("intercepting read(fd=%d, buf=%p, count=%lu)\n", fd, buf, count)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc read\n");
-        CALL_REAL_OP("read", real_read, fd, buf, count)
+    if FD_NOT_MANAGED(fd) {
+        return libc_read(fd, buf, count);
     }
     GoSlice buffer = {buf, count, count};
     return Read(fd, buffer);
 }
 
-int open64(const char *pathname, int flags, ...) {
-
-    int mode = 0;
-
-    if (__OPEN_NEEDS_MODE (flags)) {
-      va_list arg;
-      va_start(arg, flags);
-      mode = va_arg(arg, int);
-      va_end(arg);
-    }
-
-    TRACE("intercepting open64(pathname=%s, flags=%d, mode=%d)\n", pathname, flags, mode)
-    
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc open64\n");
-        CALL_REAL_OP("open64", real_open64, pathname, flags, mode)
-    }
-    int ret = Open(filename, flags, mode);
-    if (ret < 0) {
-        errno = GetErrno();
-    }
-    return ret;
-}
-
 int creat(const char *pathname, mode_t mode) {
     TRACE("intercepting creat(pathname=%s, mode=%d)\n", pathname, mode)
     
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc creat\n");
-        CALL_REAL_OP("creat", real_creat, pathname, mode)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_creat(pathname, mode);
     }
     NOT_IMPLEMENTED("creat")
 }
 
-int creat64(const char *pathname, mode_t mode) {
-    TRACE("intercepting creat64(pathname=%s, mode=%d)\n", pathname, mode)
-    
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc creat64\n");
-        CALL_REAL_OP("creat64", real_creat64, pathname, mode)
-    }
-    NOT_IMPLEMENTED("creat64")
-}
+int creat64(const char *pathname, mode_t mode) __attribute__((alias("creat"))); 
 
 int fdatasync(int fd) {
     TRACE("intercepting fdatasync(fd=%d)\n", fd)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fdatasync\n");
-        CALL_REAL_OP("fdatasync", real_fdatasync, fd)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fdatasync(fd);
     }
     NOT_IMPLEMENTED("fdatasync")
 }
@@ -332,9 +287,8 @@ int fdatasync(int fd) {
 int fsync(int fd) {
     TRACE("intercepting fsync(fd=%d)\n", fd)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fsync\n");
-        CALL_REAL_OP("fsync", real_fsync, fd)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fsync(fd);
     }
     NOT_IMPLEMENTED("fsync")
 }
@@ -342,9 +296,8 @@ int fsync(int fd) {
 int ftruncate64(int fd, off64_t length) {
     TRACE("intercepting ftrunctate64(fd=%d, length=%ld)\n", fd, length)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc ftruncate64\n");
-        CALL_REAL_OP("ftuncate64", real_ftruncate64, fd, length)
+    if FD_NOT_MANAGED(fd) {
+        return libc_ftruncate64(fd, length);
     }
     return Ftruncate(fd, length);
 }
@@ -352,9 +305,8 @@ int ftruncate64(int fd, off64_t length) {
 int ftruncate(int fd, off_t length) {
     TRACE("callled ftruncate(fd=%d; length=%ld)\n", fd, length)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc ftruncate\n");
-        CALL_REAL_OP("ftruncate", real_ftruncate, fd, length)
+    if FD_NOT_MANAGED(fd) {
+        return libc_ftruncate(fd, length);
     }
     return Ftruncate(fd, length);
 }
@@ -362,10 +314,8 @@ int ftruncate(int fd, off_t length) {
 int truncate64(const char *path, off64_t length) {
     TRACE("intercepting truncate64(path=%s, length=%ld)\n", path, length)
 
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc truncate64\n");
-        CALL_REAL_OP("truncate64", real_truncate64, path, length)
+    if PATH_NOT_MANAGED(path) {
+        return libc_truncate64(path, length);
     }
     NOT_IMPLEMENTED("truncate64")
 }
@@ -373,10 +323,8 @@ int truncate64(const char *path, off64_t length) {
 int truncate(const char *path, off_t length) {
     TRACE("intercepting truncate(path=%s, length=%ld)\n", path, length)
 
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc truncate\n");
-        CALL_REAL_OP("truncate", real_truncate, path, length)
+    if PATH_NOT_MANAGED(path) {
+        return libc_truncate(path, length);
     }
     NOT_IMPLEMENTED("truncate")
 }
@@ -384,9 +332,8 @@ int truncate(const char *path, off_t length) {
 off64_t lseek64(int fd, off64_t offset, int whence) {
     TRACE("intercepting lseek64(fd=%d, offset=%ld; whence=%d)\n", fd, offset, whence)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc lseek64\n");
-        CALL_REAL_OP("lseek64", real_lseek64, fd, offset, whence)
+    if FD_NOT_MANAGED(fd) {
+        return libc_lseek64(fd, offset, whence);
     }
     return Lseek(fd, offset, whence);
 }
@@ -394,9 +341,8 @@ off64_t lseek64(int fd, off64_t offset, int whence) {
 off_t lseek(int fd, off_t offset, int whence) {
     TRACE("intercepting lseek(fd=%d; offset=%ld, whence=%d)\n", fd, offset, whence)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc lseek\n");
-        CALL_REAL_OP("lseek", real_lseek, fd, offset, whence)
+    if FD_NOT_MANAGED(fd) {
+        return libc_lseek(fd, offset, whence);
     }
     return Lseek(fd, offset, whence);
 }
@@ -404,9 +350,8 @@ off_t lseek(int fd, off_t offset, int whence) {
 ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
     TRACE("intercepting pread(fd=%d, buf=%p, count=%lu, offset=%ld)\n", fd, buf, count, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc pread\n");
-        CALL_REAL_OP("pread", real_pread, fd, buf, count, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_pread(fd, buf, count, offset);
     }
     GoSlice buffer = {buf, count, count};
     return Pread(fd, buffer, offset);
@@ -415,9 +360,8 @@ ssize_t pread(int fd, void *buf, size_t count, off_t offset) {
 ssize_t pread64(int fd, void *buf, size_t count, off64_t offset) {
     TRACE("intercepting pread64(fd=%d, buf=%p, count=%lu, offset=%ld)\n", fd, buf, count, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc pread64\n");
-        CALL_REAL_OP("pread64", real_pread64, fd, buf, count, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_pread64(fd, buf, count, offset);
     }
     GoSlice buffer = {buf, count, count};
     return Pread(fd, buffer, offset);
@@ -426,9 +370,8 @@ ssize_t pread64(int fd, void *buf, size_t count, off64_t offset) {
 ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset) {
     TRACE("intercepting preadv(fd=%d, iov=%p, iovcnt=%d, offset=%ld)\n", fd, iov, iovcnt, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc preadv\n");
-        CALL_REAL_OP("preadv", real_preadv, fd, iov, iovcnt, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_preadv(fd, iov, iovcnt, offset);
     }
     
     GoSlice vec[iovcnt];
@@ -445,9 +388,8 @@ ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset) {
 ssize_t preadv64(int fd, const struct iovec *iov, int iovcnt, off64_t offset) {
     TRACE("intercepting preadv64(fd=%d, iov=%p, iovcnt=%d, offset=%ld)\n", fd, iov, iovcnt, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc preadv64\n");
-        CALL_REAL_OP("preadv64", real_preadv64, fd, iov, iovcnt, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_preadv64(fd, iov, iovcnt, offset);
     }
     
     GoSlice vec[iovcnt];
@@ -464,9 +406,8 @@ ssize_t preadv64(int fd, const struct iovec *iov, int iovcnt, off64_t offset) {
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
     TRACE("intercepting pwrite(fd=%d, buf=%p, count=%lu, offset=%ld)\n", fd, buf, count, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc pwrite\n");
-        CALL_REAL_OP("pwrite", real_pwrite, fd, buf, count, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_pwrite(fd, buf, count, offset);
     }
     GoSlice buffer = {(void*)buf, count, count};
     return Pwrite(fd, buffer, offset);
@@ -475,9 +416,8 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) {
 ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t offset) {
     TRACE("intercepting pwrite64(fd=%d, buf=%p, count=%lu, offset=%ld)\n", fd, buf, count, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc pwrite64\n");
-        CALL_REAL_OP("pwrite64", real_pwrite64, fd, buf, count, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_pwrite64(fd, buf, count, offset);
     }
     GoSlice buffer = {(void*)buf, count, count};
     return Pwrite(fd, buffer, offset);
@@ -486,9 +426,8 @@ ssize_t pwrite64(int fd, const void *buf, size_t count, off64_t offset) {
 ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset) {
     TRACE("intercepting pwritev(fd=%d, iov=%p, iovcnt=%d, offset=%ld)\n", fd, iov, iovcnt, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc pwritev\n");
-        CALL_REAL_OP("pwritev", real_pwritev, fd, iov, iovcnt, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_pwritev(fd, iov, iovcnt, offset);
     }
     
     GoSlice vec[iovcnt];
@@ -505,9 +444,8 @@ ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset) {
 ssize_t pwritev64(int fd, const struct iovec *iov, int iovcnt, off64_t offset) {
     TRACE("intercepting pwritev64(fd=%d, iov=%p, iovcnt=%d, offset=%ld)\n", fd, iov, iovcnt, offset)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc pwritev64\n");
-        CALL_REAL_OP("pwritev64", real_pwritev64, fd, iov, iovcnt, offset)
+    if FD_NOT_MANAGED(fd) {
+        return libc_pwritev64(fd, iov, iovcnt, offset);
     }
     
     GoSlice vec[iovcnt];
@@ -524,9 +462,8 @@ ssize_t pwritev64(int fd, const struct iovec *iov, int iovcnt, off64_t offset) {
 ssize_t readv(int fd, const struct iovec *iov, int iovcnt) {
     TRACE("intercepting readv(fd=%d, iov=%p, iovcnt=%d)\n", fd, iov, iovcnt)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc readv\n");
-        CALL_REAL_OP("readv", real_readv, fd, iov, iovcnt)
+    if FD_NOT_MANAGED(fd) {
+        return libc_readv(fd, iov, iovcnt);
     }
 
     GoSlice vec[iovcnt];
@@ -543,9 +480,8 @@ ssize_t readv(int fd, const struct iovec *iov, int iovcnt) {
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
     TRACE("intercepting writev(fd=%d, iov=%p, iovcnt=%d)\n", fd, iov, iovcnt)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc writev\n");
-        CALL_REAL_OP("writev", real_writev, fd, iov, iovcnt)
+    if FD_NOT_MANAGED(fd) {
+        return libc_writev(fd, iov, iovcnt);
     }
 
     GoSlice vec[iovcnt];
@@ -559,52 +495,32 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
     return Writev(fd, iovSlice);
 }
 
-
-// we don't intercept fcntl because its signature has variadic args with a too complex 
-// behaviour to be reproduced and passed down to the real fcntl
-/***
-int fcntl(int fd, int cmd, long arg) {
-    TRACE("intercepting fcntl(fd=%d, cmd=%d, arg=%ld)\n", fd, cmd, arg)
-    
-    if (IsFdManaged(fd)) {
-        WARNING("fcntl called on a managed fd, fcntl is not intercepted")
-    }
-    TRACE("calling libc fcntl\n");
-    CALL_REAL_OP("fcntl", real_fcntl, fd, cmd, arg)
-***/
-
-
 int ioctl(int fd, unsigned long request, void *argp) {
     TRACE("intercepting ioctl(fd=%d, request=%lu, argp=%p)\n", fd, request, argp)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc ioctl\n");
-        CALL_REAL_OP("ioctl", real_ioctl, fd, request, argp)
+    if FD_NOT_MANAGED(fd) {
+        return libc_ioctl(fd, request, argp);
     }
     NOT_IMPLEMENTED("ioctl")
 }
 
-
 int access(const char *pathname, int mode) {
     TRACE("intercepting access(pathname=%s, mode=%d)\n", pathname, mode)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc access\n");
-        CALL_REAL_OP("access", real_access, pathname, mode)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_access(pathname, mode);
     }
+    GoString filename = {pathname, strlen(pathname)};
     return Access(filename, mode);
 }
-
 
 int unlink(const char *pathname) {
     TRACE("intercepting unlink(pathname=%s)\n", pathname)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc unlink\n");
-        CALL_REAL_OP("unlink", real_unlink, pathname)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_unlink(pathname);
     }
+    GoString filename = {pathname, strlen(pathname)};
     int ret = Unlink(filename);
     if (ret < 0) {
         errno = GetErrno();
@@ -612,57 +528,51 @@ int unlink(const char *pathname) {
     return ret;
 }
 
-
 int __xstat(int vers, const char *pathname, struct stat *buf) {
     TRACE("intercepting __xstat(vers=%d, pathname=%s, buf=%p)\n", vers, pathname, buf)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc __xstat\n");
-        CALL_REAL_OP("__xstat", real___xstat, vers, pathname, buf)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc__xstat(vers, pathname, buf);
     }
+    GoString filename = {pathname, strlen(pathname)};
     return Stat(filename, buf);
 }
 
 int __xstat64(int vers, const char *pathname, struct stat64 *buf) {
     TRACE("intercepting __xstat64(vers=%d, pathname=%s, buf=%p)\n", vers, pathname, buf)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc __xstat64\n");
-        CALL_REAL_OP("__xstat64", real___xstat64, vers, pathname, buf)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc__xstat64(vers, pathname, buf);
     }
+    GoString filename = {pathname, strlen(pathname)};
     return Stat64(filename, buf);
 }
 
 int __lxstat(int vers, const char *pathname, struct stat *buf) {
     TRACE("intercepting __lxstat(vers=%d, pathname=%s, buf=%p)\n", vers, pathname, buf)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc __lxstat\n");
-        CALL_REAL_OP("__lxstat", real___lxstat, vers, pathname, buf)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc__lxstat(vers, pathname, buf);
     }
+    GoString filename = {pathname, strlen(pathname)};
     return Lstat(filename, buf);
 }
 
 int __lxstat64(int vers, const char *pathname, struct stat64 *buf) {
     TRACE("intercepting __lxstat64(vers=%d, pathname=%s, buf=%p)\n", vers, pathname, buf)
 
-    GoString filename = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc __lxstat64\n");
-        CALL_REAL_OP("__lxstat64", real___lxstat64, vers, pathname, buf)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc__lxstat64(vers, pathname, buf);
     }
+    GoString filename = {pathname, strlen(pathname)};
     return Lstat64(filename, buf);
 }
 
 int __fxstat(int vers, int fd, struct stat *buf) {
     TRACE("intercepting __fxstat(vers=%d, fd=%d, buf=%p)\n", vers, fd, buf)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc __fxstat\n");
-        CALL_REAL_OP("__fxstat", real___fxstat, vers, fd, buf)
+    if FD_NOT_MANAGED(fd) {
+        return libc__fxstat(vers, fd, buf);
     }
     return Fstat(fd, buf);
 }
@@ -670,41 +580,37 @@ int __fxstat(int vers, int fd, struct stat *buf) {
 int __fxstat64(int vers, int fd, struct stat64 *buf) {
     TRACE("intercepting __fxstat64(vers=%d, fd=%d, buf=%p)\n", vers, fd, buf)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc __fxstat64\n");
-        CALL_REAL_OP("__fxstat64", real___fxstat64, vers, fd, buf)
+    if FD_NOT_MANAGED(fd) {
+        return libc__fxstat64(vers, fd, buf);
     }
     return Fstat64(fd, buf);
 }
 
-
 int statfs(const char *path, struct statfs *buf) {
     TRACE("intercepting statfs(path=%s, buf=%p)\n", path, buf)
 
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc statfs\n");
-        CALL_REAL_OP("statfs", real_statfs, path,  buf)
+    if PATH_NOT_MANAGED(path) {
+        return libc_statfs(path,  buf);
     }
+    GoString filename = {path, strlen(path)};
     return Statfs(filename, buf);
 }
 
 int statfs64(const char *path, struct statfs64 *buf) {
     TRACE("intercepting statfs64(path=%s, buf=%p)\n", path, buf)
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc statfs64\n");
-        CALL_REAL_OP("statfs64", real_statfs64, path,  buf)
+
+    if PATH_NOT_MANAGED(path) {
+        return libc_statfs64(path,  buf);
     }
+    GoString filename = {path, strlen(path)};
     return Statfs64(filename, buf);
 }
 
 int fstatfs(int fd, struct statfs *buf) {
     TRACE("intercepting fstatfs(fd=%d, buf=%p)\n", fd, buf)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fstatfs\n");
-        CALL_REAL_OP("fstatfs", real_fstatfs, fd, buf)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fstatfs(fd, buf);
     }
     NOT_IMPLEMENTED("fstatfs")
 }
@@ -712,9 +618,8 @@ int fstatfs(int fd, struct statfs *buf) {
 int fstatfs64(int fd, struct statfs64 *buf) {
     TRACE("intercepting fstatfs64(fd=%d, buf=%p)\n", fd, buf)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fstatfs64\n");
-        CALL_REAL_OP("fstatfs64", real_fstatfs64, fd, buf)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fstatfs64(fd, buf);
     }
     NOT_IMPLEMENTED("fstatfs64")
 }
@@ -722,9 +627,8 @@ int fstatfs64(int fd, struct statfs64 *buf) {
 FILE* fdopen(int fd, const char *mode) {
     TRACE("intercepting fdopen(fd=%d, mode=%s)\n", fd, mode)
 
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fdopen\n");
-        CALL_REAL_OP("fdopen", real_fdopen, fd, mode)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fdopen(fd, mode);
     }
     NOT_IMPLEMENTED("fdopen")
 }
@@ -732,55 +636,39 @@ FILE* fdopen(int fd, const char *mode) {
 FILE* fopen(const char *path, const char *mode) {
     TRACE("intercepting fopen(path=%s, mode=%s)\n", path, mode)
 
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc fopen\n");
-        CALL_REAL_OP("fopen", real_fopen, path, mode)
+    if PATH_NOT_MANAGED(path) {
+        return libc_fopen(path, mode);
     }
+
+    FILE *stream = get_new_stream(fd_register);
+    GoString gopath = {path, strlen(path)};
     GoString gomode = {mode, strlen(mode)};
-    return Fopen(filename, gomode);
+    int ret = Fopen(gopath, gomode, fileno(stream));
+    if (ret < 0) {
+        remove_fd(fd_register, fileno(stream));
+        return (FILE*)(NULL);
+    }
+    return stream;
 }
 
-FILE* fopen64(const char *path, const char *mode) {
-    TRACE("intercepting fopen64(path=%s, mode=%s)\n", path, mode)
-
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc fopen64\n");
-        CALL_REAL_OP("fopen64", real_fopen64, path, mode)
-    }
-    GoString gomode = {mode, strlen(mode)};
-    return Fopen(filename, gomode);
-}
+FILE* fopen64(const char *path, const char *mode) __attribute__((alias("fopen")));
 
 FILE* freopen(const char *path, const char *mode, FILE *stream) {
     TRACE("intercepting fropen(path=%s, mode=%s, stream=%p)\n", path, mode, stream)
 
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc freopen\n");
-        CALL_REAL_OP("freopen", real_freopen, path, mode, stream)
+    if PATH_NOT_MANAGED(path) {
+        return libc_freopen(path, mode, stream);
     }
     NOT_IMPLEMENTED("freopen")
 }
 
-FILE* freopen64(const char *path, const char *mode, FILE *stream) {
-    TRACE("intercepting fropen64(path=%s, mode=%s, stream=%p)\n", path, mode, stream)
-
-    GoString filename = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(filename)) {
-        TRACE("calling libc freopen64\n");
-        CALL_REAL_OP("freopen64", real_freopen64, path, mode, stream)
-    }
-    NOT_IMPLEMENTED("freopen64")
-}
+FILE* freopen64(const char *path, const char *mode, FILE *stream)  __attribute__((alias("fopen")));
 
 int fclose(FILE *stream) {
     TRACE("intercepting fclose(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fclose\n");
-        CALL_REAL_OP("fclose", real_fclose, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fclose(stream);
     }
     Fflush(stream);
     return close(fileno(stream));
@@ -789,9 +677,8 @@ int fclose(FILE *stream) {
 int fflush(FILE *stream) {
     TRACE("intercepting fflush(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fflush\n");
-        CALL_REAL_OP("fflush", real_fflush, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fflush(stream);
     }
     return Fflush(stream);
 }
@@ -799,9 +686,8 @@ int fflush(FILE *stream) {
 int fputc(int c, FILE *stream) {
     TRACE("intercepting fputc(c=%d, stream=%p)\n", c, stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fputc\n");
-        CALL_REAL_OP("fputc", real_fputc, c, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fputc(c, stream);
     }
     GoSlice cBuf = {(char*)&c, 1, 1};
     int n = Write(fileno(stream), cBuf); 
@@ -813,9 +699,8 @@ int fputc(int c, FILE *stream) {
 char* fgets(char *dst, int max, FILE *stream) {
     TRACE("intercepting fgets(dst=%s, max=%d, stream=%p)\n", dst, max, stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fgets\n");
-        CALL_REAL_OP("fgets", real_fgets, dst, max, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fgets(dst, max, stream);
     }
     
     size_t n = max;
@@ -841,13 +726,11 @@ char* fgets(char *dst, int max, FILE *stream) {
     return result;
 }
 
-
 int fgetc(FILE *stream) {
     TRACE("intercepting fgetc(stream=%p)\n", stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fgetc\n");
-        CALL_REAL_OP("fgetc", real_fgetc, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fgetc(stream);
     }
     
 	char c;
@@ -863,9 +746,8 @@ int fgetc(FILE *stream) {
 int fgetpos(FILE *stream, fpos_t *pos) {
     TRACE("intercepting fgetpos(stream=%p, pos=%p)\n", stream, pos)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fgetpos\n");
-        CALL_REAL_OP("fgetpos", real_fgetpos, stream, pos)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fgetpos(stream, pos);
     }
     NOT_IMPLEMENTED("fgetpos")
 }
@@ -873,9 +755,8 @@ int fgetpos(FILE *stream, fpos_t *pos) {
 int fgetpos64(FILE *stream, fpos64_t *pos) {
     TRACE("intercepting fgetpos64(stream=%p, pos=%p)\n", stream, pos)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fgetpos64\n");
-        CALL_REAL_OP("fgetpos64", real_fgetpos64, stream, pos)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fgetpos64(stream, pos);
     }
     NOT_IMPLEMENTED("fgetpos64")
 }
@@ -883,9 +764,8 @@ int fgetpos64(FILE *stream, fpos64_t *pos) {
 int fseek(FILE *stream, long offset, int whence) {
     TRACE("intercepting fseek(stream=%p, offset=%ld, whence=%d)\n", stream, offset, whence)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fseek\n");
-        CALL_REAL_OP("fseek", real_fseek, stream, offset, whence)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fseek(stream, offset, whence);
     }
     NOT_IMPLEMENTED("fseek")
 }
@@ -893,9 +773,8 @@ int fseek(FILE *stream, long offset, int whence) {
 int fseeko(FILE *stream, off_t offset, int whence) {
     TRACE("intercepting fseeko(stream=%p, offset=%ld, whence=%d)\n", stream, offset, whence)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fseeko\n");
-        CALL_REAL_OP("fseeko", real_fseeko, stream, offset, whence)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fseeko(stream, offset, whence);
     }
     NOT_IMPLEMENTED("fseeko")
 }
@@ -903,9 +782,8 @@ int fseeko(FILE *stream, off_t offset, int whence) {
 int fseeko64(FILE *stream, off64_t offset, int whence) {
     TRACE("intercepting fseeko64(stream=%p, offset=%ld, whence=%d)\n", stream, offset, whence)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fseeko64\n");
-        CALL_REAL_OP("fseeko64", real_fseeko64, stream, offset, whence)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fseeko64(stream, offset, whence);
     }
     NOT_IMPLEMENTED("fseeko")
 }
@@ -913,9 +791,8 @@ int fseeko64(FILE *stream, off64_t offset, int whence) {
 int fsetpos(FILE *stream, const fpos_t *pos) {
     TRACE("intercepting fsetpos(stream=%p, pos=%p)\n", stream, pos)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fsetpos\n");
-        CALL_REAL_OP("fsetpos", real_fsetpos, stream, pos)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fsetpos(stream, pos);
     }
     NOT_IMPLEMENTED("fsetpos")
 }
@@ -923,9 +800,8 @@ int fsetpos(FILE *stream, const fpos_t *pos) {
 int fsetpos64(FILE *stream, const fpos64_t *pos) {
     TRACE("intercepting fsetpos64(stream=%p, pos=%p)\n", stream, pos)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fsetpos64\n");
-        CALL_REAL_OP("fsetpos64", real_fsetpos64, stream, pos)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fsetpos64(stream, pos);
     }
     NOT_IMPLEMENTED("fsetpos64")
 }
@@ -933,19 +809,18 @@ int fsetpos64(FILE *stream, const fpos64_t *pos) {
 int fputs(const char *s, FILE *stream) {
     TRACE("intercepting fputs(s=%s, stream=%p)\n", s, stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fputs\n");
-        CALL_REAL_OP("fputs", real_fputs, s, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fputs(s, stream);
     }
-    NOT_IMPLEMENTED("fputs")
+    size_t len = strlen(s);
+	return (fwrite(s, 1, len, stream)==len) - 1;
 }
 
 int putc(int c, FILE *stream) {
     TRACE("intercepting putc(c=%d, stream=%p)\n", c, stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc putc\n");
-        CALL_REAL_OP("putc", real_putc, c, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_putc(c, stream);
     }
     NOT_IMPLEMENTED("putc")
 }
@@ -953,9 +828,8 @@ int putc(int c, FILE *stream) {
 int getc(FILE *stream) {
     TRACE("intercepting getc(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc getc\n");
-        CALL_REAL_OP("getc", real_getc, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_getc(stream);
     }
     NOT_IMPLEMENTED("getc")
 }
@@ -963,9 +837,8 @@ int getc(FILE *stream) {
 int ungetc(int c, FILE *stream) {
     TRACE("intercepting fgetc(c=%d, stream=%p)\n", c, stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc ungetc\n");
-        CALL_REAL_OP("ungetc", real_ungetc, c, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_ungetc(c, stream);
     }
     NOT_IMPLEMENTED("ungetc")
 }
@@ -973,9 +846,8 @@ int ungetc(int c, FILE *stream) {
 long ftell(FILE *stream) {
     TRACE("intercepting ftell(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc ftell\n");
-        CALL_REAL_OP("ftell", real_ftell, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_ftell(stream);
     }
     NOT_IMPLEMENTED("ftell")
 }
@@ -983,9 +855,8 @@ long ftell(FILE *stream) {
 off_t ftello(FILE *stream) {
     TRACE("intercepting ftello(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc ftello\n");
-        CALL_REAL_OP("ftello", real_ftello, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_ftello(stream);
     }
     NOT_IMPLEMENTED("ftello")
 }
@@ -993,9 +864,8 @@ off_t ftello(FILE *stream) {
 off64_t ftello64(FILE *stream) {
     TRACE("intercepting ftello64(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc ftello64\n");
-        CALL_REAL_OP("ftello64", real_ftello64, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_ftello64(stream);
     }
     NOT_IMPLEMENTED("ftello64")
 }
@@ -1003,9 +873,8 @@ off64_t ftello64(FILE *stream) {
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     TRACE("intercepting fread(ptr=%p, size=%lu, nmemb=%lu, stream=%p)\n", ptr, size, nmemb, stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fread\n");
-        CALL_REAL_OP("fread", real_fread, ptr, size, nmemb, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fread(ptr, size, nmemb, stream);
     }
     GoSlice buffer = {ptr, size * nmemb, size * nmemb};
     return Read(fileno(stream), buffer);
@@ -1014,24 +883,10 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
     TRACE("intercepting fwrite(ptr=%p, size=%lu, nmemb=%lu, stream=%p)\n", ptr, size, nmemb, stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fwrite\n");
-        CALL_REAL_OP("fwrite", real_fwrite, ptr, size, nmemb, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_fwrite(ptr, size, nmemb, stream);
     }
     GoSlice buffer = {(void*)ptr, size * nmemb, size * nmemb};
-    return Write(fileno(stream), buffer);
-}
-
-int _fprint(FILE *stream, const char *msg, int size) {
-    
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc fprintf\n");
-        if (!real_fprintf) {
-            real_fprintf = dlsym(RTLD_NEXT, "fprintf");
-        }
-        return real_fprintf(stream, "%s", msg);
-    }
-    GoSlice buffer = {(char*)msg, size, size};
     return Write(fileno(stream), buffer);
 }
 
@@ -1062,7 +917,7 @@ int __fprintf_chk(FILE *stream, int flag, const char *fmt, ...) {
     }
     va_end(ap);
 
-    int ret = _fprint(stream, msg, size); 
+    int ret = fputs(msg, stream); 
     free(msg);
     return ret;
 }
@@ -1094,18 +949,17 @@ int fprintf(FILE *stream, const char *fmt, ...) {
     }
     va_end(ap);
 
-    int ret = _fprint(stream, msg, size); 
+    int ret = fputs(msg, stream); 
     free(msg);
     return ret;
 }
 
-
 void rewind(FILE *stream) {
     TRACE("intercepting rewind(stream=%p)\n", stream)
 
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc rewind\n");
-        CALL_REAL_OP("rewind", real_rewind, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        libc_rewind(stream);
+        return;
     }
     NOT_IMPLEMENTED("rewind")
 }
@@ -1113,37 +967,32 @@ void rewind(FILE *stream) {
 int dup2(int oldfd, int newfd) {
     TRACE("intercepting dup2(oldfd=%d, newfd=%d)\n", oldfd, newfd)
 
-    if (!pdwfs_initialized || (!IsFdManaged(oldfd) && !IsFdManaged(newfd))) {
-    TRACE("calling libc dup2\n");
-    CALL_REAL_OP("dup2", real_dup2, oldfd, newfd)
-}
+    if (FD_NOT_MANAGED(oldfd) && FD_NOT_MANAGED(newfd)) {
+        return libc_dup2(oldfd, newfd);
+    }
     NOT_IMPLEMENTED("dup2")
 }
 
 int unlinkat(int dirfd, const char *pathname, int flags) {
-    TRACE("intercepting unlinkat(dirfd=%d, pathname=%s, flags=%d)\n", dirfd, pathname, flags)
-    TRACE("calling libc unlinkat (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("unlinkat", real_unlinkat, dirfd, pathname, flags)
+    TRACE("intercepting unlinkat(dirfd=%d, pathname=%s, flags=%d) (PASS THOUGH)\n", dirfd, pathname, flags)
+    return libc_unlinkat(dirfd, pathname, flags);
     }
 
 int faccessat(int dirfd, const char *pathname, int mode, int flags) {
-    TRACE("intercepting faccessat(dirfd=%d, pathname=%s, mode=%d, flags=%d)\n", dirfd, pathname, mode, flags)
-    TRACE("calling libc faccessat (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("faccessat", real_faccessat, dirfd, pathname, mode, flags)
+    TRACE("intercepting faccessat(dirfd=%d, pathname=%s, mode=%d, flags=%d) (PASS THOUGH)\n", dirfd, pathname, mode, flags)
+    return libc_faccessat(dirfd, pathname, mode, flags);
     }
 
 // __fxstatat is the glibc function corresponding to fstatat syscall
 int __fxstatat(int vers, int dirfd, const char *pathname, struct stat *buf, int flags) {
-    TRACE("intercepting __fxstatat(vers=%d, dirfd=%d, pathname=%s, buf=%p, flags=%d)\n", vers, dirfd, pathname, buf, flags)
-    TRACE("calling libc __fxstatat (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("__fxstatat", real___fxstatat, vers, dirfd, pathname, buf, flags)
+    TRACE("intercepting __fxstatat(vers=%d, dirfd=%d, pathname=%s, buf=%p, flags=%d) (PASS THOUGH)\n", vers, dirfd, pathname, buf, flags)
+    return libc__fxstatat(vers, dirfd, pathname, buf, flags);
 }
 
 // __fxstatat64 is the LARGEFILE64 version of glibc function corresponding to fstatat syscall
 int __fxstatat64(int vers, int dirfd, const char *pathname, struct stat64 *buf, int flags) {
-    TRACE("intercepting __fxstatat64(vers=%d, dirfd=%d, pathname=%s, buf=%p, flags=%d)\n", dirfd, pathname, buf, flags)
-    TRACE("calling libc __fxstatat64 (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("__fxstatat64", real___fxstatat64, vers, dirfd, pathname, buf, flags)
+    TRACE("intercepting __fxstatat64(vers=%d, dirfd=%d, pathname=%s, buf=%p, flags=%d) (PASS THOUGH)\n", dirfd, pathname, buf, flags)
+    return libc__fxstatat64(vers, dirfd, pathname, buf, flags);
 }
 
 int openat(int dirfd, const char *pathname, int flags, ...) {
@@ -1157,70 +1006,60 @@ int openat(int dirfd, const char *pathname, int flags, ...) {
         va_end(arg);
         }
 
-    TRACE("intercepting openat(dirfd=%d, pathname=%s, flags=%d, mode=%d)\n", dirfd, pathname, flags, mode)
+    TRACE("intercepting openat(dirfd=%d, pathname=%s, flags=%d, mode=%d) (PASS THOUGH)\n", dirfd, pathname, flags, mode)
     // NOTE: see the comment of func (fs *PdwFS) registerFile in pdwfs.go before implementing openat interception
-    TRACE("calling libc openat (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("openat", real_openat, dirfd, pathname, flags, mode)
+    return libc_openat(dirfd, pathname, flags, mode);
 }
 
 int mkdir(const char *pathname, mode_t mode) {
     TRACE("intercepting mkdir(pathname=%s, mode=%d)\n", pathname, mode)
     
-    GoString gopath = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(gopath)) {
-        TRACE("calling libc mkdir\n");
-        CALL_REAL_OP("mkdir", real_mkdir, pathname, mode)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_mkdir(pathname, mode);
     }
+    GoString gopath = {pathname, strlen(pathname)};
     return Mkdir(gopath, mode);
 }
 
 int mkdirat(int dirfd, const char *pathname, mode_t mode) {
-    TRACE("intercepting mkdirat(dirfd=%d, pathname=%s, mode=%d)\n", dirfd, pathname, mode)
-    TRACE("calling libc mkdirat (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("mkdirat", real_mkdirat, dirfd, pathname, mode)
+    TRACE("intercepting mkdirat(dirfd=%d, pathname=%s, mode=%d) (PASS THROUGH)\n", dirfd, pathname, mode)
+    return libc_mkdirat(dirfd, pathname, mode);
 }
 
 int rmdir(const char *pathname) {
     TRACE("intercepting rmdir(pathname=%s)\n", pathname)
     
-    GoString gopath = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(gopath)) {
-        TRACE("calling libc rmdir\n");
-        CALL_REAL_OP("rmdir", real_rmdir, pathname)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_rmdir(pathname);
     }
+    GoString gopath = {pathname, strlen(pathname)};
     return Rmdir(gopath);
 }
 
 int rename(const char *oldpath, const char *newpath) {
     TRACE("intercepting rename(oldname=%s, newpath=%s)\n", oldpath, newpath)
     
-    GoString old = {oldpath, strlen(oldpath)};
-    GoString new = {newpath, strlen(newpath)};
-    if (!pdwfs_initialized || (!IsFileManaged(old) && !IsFileManaged(new))) {
-        TRACE("calling libc rename\n");
-        CALL_REAL_OP("rename", real_rename, oldpath, newpath)
+    if (PATH_NOT_MANAGED(oldpath) && PATH_NOT_MANAGED(newpath)) {
+        return libc_rename(oldpath, newpath);
     }
     NOT_IMPLEMENTED("rename")
 }
 
 int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath) {
-    TRACE("intercepting renameat(olddirfd=%d, oldpath=%s, newdirfd=%d, newpath=%s)\n", olddirfd, oldpath, newdirfd, newpath)
-    TRACE("calling libc renameat (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("renameat", real_renameat, olddirfd, oldpath, newdirfd, newpath)
+    TRACE("intercepting renameat(olddirfd=%d, oldpath=%s, newdirfd=%d, newpath=%s) (PASS THROUGH)\n", olddirfd, oldpath, newdirfd, newpath)
+    return libc_renameat(olddirfd, oldpath, newdirfd, newpath);
 }
 
 int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags) {
-    TRACE("intercepting renameat2(olddirfd=%d, oldpath=%s, newdirfd=%d, newpath=%s, flags=%d)\n", olddirfd, oldpath, newdirfd, newpath, flags)
-    TRACE("calling libc renameat2 (INTERCEPTION NOT IMPLEMENTED)\n")
-    CALL_REAL_OP("renameat2", real_renameat2, olddirfd, oldpath, newdirfd, newpath, flags)
+    TRACE("intercepting renameat2(olddirfd=%d, oldpath=%s, newdirfd=%d, newpath=%s, flags=%d) (PASS THROUGH)\n", olddirfd, oldpath, newdirfd, newpath, flags)
+    return libc_renameat2(olddirfd, oldpath, newdirfd, newpath, flags);
 }
 
 int posix_fadvise(int fd, off_t offset, off_t len, int advice) {
     TRACE("intercepting posix_fadvise(fd=%d, offset=%d, len=%d, advice=%d)\n", fd, offset, len, advice)
  
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc posix_fadvise\n");
-        CALL_REAL_OP("posix_fadvise", real_posix_fadvise, fd, offset, len, advice)
+    if FD_NOT_MANAGED(fd) {
+        return libc_posix_fadvise(fd, offset, len, advice);
     }
     return Fadvise(fd, offset, len, advice);
 }
@@ -1228,9 +1067,8 @@ int posix_fadvise(int fd, off_t offset, off_t len, int advice) {
 int posix_fadvise64(int fd, off64_t offset, off64_t len, int advice) {
     TRACE("intercepting posix_fadvise64(fd=%d, offset=%d, len=%d, advice=%d)\n", fd, offset, len, advice)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc posix_fadvise64\n");
-        CALL_REAL_OP("posix_fadvise64", real_posix_fadvise64, fd, offset, len, advice)
+    if FD_NOT_MANAGED(fd) {
+        return libc_posix_fadvise64(fd, offset, len, advice);
     }
     return Fadvise(fd, offset, len, advice);
 }
@@ -1238,31 +1076,28 @@ int posix_fadvise64(int fd, off64_t offset, off64_t len, int advice) {
 int statvfs(const char *pathname, struct statvfs *buf) {
     TRACE("intercepting statvfs(path=%s, buf=%p)\n", pathname, buf)
     
-    GoString gopath = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(gopath)) {
-        TRACE("calling libc statvfs\n");
-        CALL_REAL_OP("statvfs", real_statvfs, pathname, buf)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_statvfs(pathname, buf);
     }
+    GoString gopath = {pathname, strlen(pathname)};
     return Statvfs(gopath, buf);
 }
 
 int statvfs64(const char *pathname, struct statvfs64 *buf) {
     TRACE("intercepting statvfs64(path=%s, buf=%p)\n", pathname, buf)
     
-    GoString gopath = {pathname, strlen(pathname)};
-    if (!pdwfs_initialized || !IsFileManaged(gopath)) {
-        TRACE("calling libc statvfs64\n");
-        CALL_REAL_OP("statvfs64", real_statvfs64, pathname, buf)
+    if PATH_NOT_MANAGED(pathname) {
+        return libc_statvfs64(pathname, buf);
     }
+    GoString gopath = {pathname, strlen(pathname)};
     return Statvfs64(gopath, buf);
 }
 
 int fstatvfs(int fd, struct statvfs *buf) {
     TRACE("intercepting fstatvfs(fd=%d, buf=%p)\n", fd, buf)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fstatvfs\n");
-        CALL_REAL_OP("fstatvfs", real_fstatvfs, fd, buf)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fstatvfs(fd, buf);
     }
     NOT_IMPLEMENTED("fstatvfs")
 }
@@ -1270,20 +1105,17 @@ int fstatvfs(int fd, struct statvfs *buf) {
 int fstatvfs64(int fd, struct statvfs64 *buf) {
     TRACE("intercepting fstatvfs64(fd=%d, buf=%p)\n", fd, buf)
     
-    if (!pdwfs_initialized || IS_STD_FD(fd) || !IsFdManaged(fd)) {
-        TRACE("calling libc fstatvfs64\n");
-        CALL_REAL_OP("fstatvfs64", real_fstatvfs64, fd, buf)
+    if FD_NOT_MANAGED(fd) {
+        return libc_fstatvfs64(fd, buf);
     }
     NOT_IMPLEMENTED("fstatvfs64")
 }
 
-
-ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp) {
-    TRACE("intercepting getdelim(buf=%p, bufsiz=%p, delimiter=%d, stream=%p)\n", buf, bufsiz, delimiter, fp)
+ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *stream) {
+    TRACE("intercepting getdelim(buf=%p, bufsiz=%p, delimiter=%d, stream=%p)\n", buf, bufsiz, delimiter, stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(fp) || !IsFdManaged(fileno(fp))) {
-        TRACE("calling libc getdelim\n");
-        CALL_REAL_OP("getdelim", real_getdelim, buf, bufsiz, delimiter, fp)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_getdelim(buf, bufsiz, delimiter, stream);
     }
 
     char *ptr, *eptr;
@@ -1296,9 +1128,9 @@ ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp) {
 	}
 
 	for (ptr = *buf, eptr = *buf + *bufsiz;;) {
-		int c = fgetc(fp);
+		int c = fgetc(stream);
 		if (c == -1) {
-			if (feof(fp))
+			if (feof(stream))
                 return ptr == *buf ? -1 : ptr - *buf;
             else
 				return -1;
@@ -1322,13 +1154,11 @@ ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp) {
     }
 }
 
-
 ssize_t getline(char **buf, size_t *bufsiz, FILE *stream) {
     TRACE("intercepting getline(buf=%p, bufsiz=%p, stream=%p)\n", buf, bufsiz, stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc getline\n");
-        CALL_REAL_OP("getline", real_getline, buf, bufsiz, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_getline(buf, bufsiz, stream);
     }
     return getdelim(buf, bufsiz, '\n', stream);
 }
@@ -1336,10 +1166,8 @@ ssize_t getline(char **buf, size_t *bufsiz, FILE *stream) {
 DIR* opendir(const char* path) {
     TRACE("intercepting opendir(path=%s)\n", path)
     
-    GoString gopath = {path, strlen(path)};
-    if (!pdwfs_initialized || !IsFileManaged(gopath)) {
-        TRACE("calling libc opendir\n");
-        CALL_REAL_OP("opendir", real_opendir, path)
+    if PATH_NOT_MANAGED(path) {
+        return libc_opendir(path);
     }
     NOT_IMPLEMENTED("opendir")
 }
@@ -1347,9 +1175,8 @@ DIR* opendir(const char* path) {
 int feof(FILE *stream) {
     TRACE("intercepting feof(stream=%p)\n", stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc feof\n");
-        CALL_REAL_OP("feof", real_feof, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_feof(stream);
     }
     int fd = fileno(stream);
     off_t cur_off = lseek(fd, 0, SEEK_CUR);
@@ -1362,9 +1189,8 @@ int feof(FILE *stream) {
 int ferror(FILE *stream) {
     TRACE("intercepting ferror(stream=%p)\n", stream)
     
-    if (!pdwfs_initialized || IS_STD_STREAM(stream) || !IsFdManaged(fileno(stream))) {
-        TRACE("calling libc ferror\n");
-        CALL_REAL_OP("ferror", real_ferror, stream)
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_ferror(stream);
     }
     NOT_IMPLEMENTED("ferror")
 }

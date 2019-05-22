@@ -21,7 +21,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_pread() {
+int test_pread() {
     
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -46,8 +46,6 @@ void test_pread() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_pread();
+    return 0;
 }

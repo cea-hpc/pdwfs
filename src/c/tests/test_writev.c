@@ -20,7 +20,7 @@
 #include <sys/uio.h>
 #include "tests.h"
 
-void test_writev() {
+int test_writev() {
    
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -50,8 +50,6 @@ void test_writev() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_writev();
+    return 0;
 }

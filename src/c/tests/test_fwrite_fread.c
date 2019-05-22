@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_fwrite_fread() {
+int test_fwrite_fread() {
  
     FILE* f = fopen(TESTFILE, "w");
     CHECK_NULL(f, "fopen")
@@ -48,8 +48,6 @@ void test_fwrite_fread() {
 
     fclose(f);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_fwrite_fread();
+    return 0;
 }

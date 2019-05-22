@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Main entry points into Go code of pdwfs.
+// This file contains exported functions to the C layer of pdwfs
 
 package main
 
@@ -27,16 +30,15 @@ package main
 import "C"
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
-	"unsafe"
 
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/cea-hpc/pdwfs/redisfs"
@@ -47,46 +49,48 @@ import (
 var (
 	errFdPoolTempCreate = errors.New("Failed to create a tempfile to get a valid fd")
 	errInvalidFd        = errors.New("Invalid file descriptor")
+	errFdInUse          = errors.New("file descriptor already used")
 )
 
-func check(err error) {
+// helpers for error checking
+
+func try(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-type fileTuple struct {
-	tempFileName string
-	cFile        *C.FILE
-	redisFile    *redisfs.File
-}
+var check = try
 
-//PdwFS is a virtual filesystem object built on top of github.com/cea-hpc/pdwfs/redisfs
+// PdwFS manages multiple redisfs mount points and keeps a map of opened fd <-> opened redisfs.File.
+// This map is used to translate I/O calls coming from the C layer and addressed by a system file descriptor
+// to pdwfs implementation of Files (redisfs.File).
 type PdwFS struct {
 	mounts    map[string]*redisfs.RedisFS
 	conf      *config.Pdwfs
 	prefix    string
-	fdFileMap map[int]*fileTuple
+	fdFileMap map[int]*redisfs.File
 	lock      sync.RWMutex
 }
 
-//NewPdwFS returns a pdwfs virtual filesystem
+//NewPdwFS returns a new PdwFS instance with newly created redisfs mount points based on configuration info
 func NewPdwFS(conf *config.Pdwfs) *PdwFS {
 	if len(conf.Mounts) == 0 {
 		panic("No mount path specified...")
 	}
 	mounts := map[string]*redisfs.RedisFS{}
 	for path, mountConf := range conf.Mounts {
-		mounts[path] = redisfs.NewRedisFS(conf.RedisConf, mountConf)
+		mounts[path] = redisfs.NewRedisFS(conf.Redis, mountConf)
 	}
 	return &PdwFS{
 		mounts:    mounts,
 		conf:      conf,
-		fdFileMap: make(map[int]*fileTuple),
+		fdFileMap: make(map[int]*redisfs.File),
 		lock:      sync.RWMutex{},
 	}
 }
 
+// parse a filename to return the correponding mount point if found
 func (fs *PdwFS) getMount(filename string) (*redisfs.RedisFS, error) {
 	if filename == "" {
 		//short-circuit filepath.Abs as Abs behaviour is to return working directory on empty string
@@ -105,104 +109,67 @@ func (fs *PdwFS) getMount(filename string) (*redisfs.RedisFS, error) {
 	return nil, nil
 }
 
-func (fs *PdwFS) registerFile(redisFile *redisfs.File) (*C.FILE, error) {
-	// create a temporary file to get a valid system file descritor
-	// NOTE: TempFile uses os.OpenFile which uses openat syscall which is currently not intercepted
-	// so if a user set a mount point in the same temp folder used by TempFile, we're not
-	// entering in a recursive loop (intercepting a file in temp, creating a twin temp file, etc)
-	tempFile, err := ioutil.TempFile("", "pdwfs")
-	check(err)
-	tempFileName := tempFile.Name()
-	tempFile.Close()
-	path := C.CString(tempFileName)
-	mode := C.CString("r")
-	cFile, err := C.fopen(path, mode)
-	C.free(unsafe.Pointer(path))
-	C.free(unsafe.Pointer(mode))
-	check(err)
-	fd := int(C.fileno(cFile))
-	fs.fdFileMap[fd] = &fileTuple{tempFileName, cFile, redisFile}
-	return cFile, nil
+// register a new redisfs.File and its associated system file descriptor
+func (fs *PdwFS) registerFile(fd int, redisFile *redisfs.File) error {
+	if _, ok := fs.fdFileMap[fd]; ok {
+		return errFdInUse
+	}
+	fs.fdFileMap[fd] = redisFile
+	return nil
 }
 
-func (fs *PdwFS) closeFd(fd int) error {
-	//FIXME: not thread-safe if multiple thread handle the same fd...
+// remove a file descriptor and its associated redisfs.File
+func (fs *PdwFS) removeFd(fd int) error {
 	if _, ok := fs.fdFileMap[fd]; !ok {
 		return errInvalidFd
 	}
 	delete(fs.fdFileMap, fd)
-	// deleting fd from the managed fd map first ensures the subsequent call to close(fd),
-	// (which will be intercepted by pdwfs), will be passed to the real libc close call
-	C.close(C.int(fd))
 	return nil
 }
 
 func (fs *PdwFS) getFileFromFd(fd int) (*redisfs.File, error) {
-	if fileTuple, ok := fs.fdFileMap[fd]; ok {
-		return fileTuple.redisFile, nil
+	if f, ok := fs.fdFileMap[fd]; ok {
+		return f, nil
 	}
 	return nil, errInvalidFd
 }
 
-func (fs *PdwFS) isFdManaged(fd int) bool {
-	if _, ok := fs.fdFileMap[fd]; ok {
-		return true
-	}
-	return false
-}
-
 func (fs *PdwFS) finalize() {
 	for _, mount := range fs.mounts {
-		err := mount.Finalize()
-		check(err)
-	}
-	// clean up all temp files created
-	for fd, fileTuple := range fs.fdFileMap {
-		fs.closeFd(fd)
-		err := os.Remove(fileTuple.tempFileName)
-		check(err)
+		mount.Finalize()
 	}
 }
 
 // ----------------Exported to C ----------------
+// function below are exported to the C layer using cgo system
 
 var pdwfs *PdwFS
 
-// InitPdwfs is called once when pdwfs.so library is loaded (gcc constructor attribute)
+// InitPdwfs is called only once when pdwfs.so library is loaded (gcc constructor attribute).
+// The mountBuf argument is used to communicate the list of mount points back to the C layer.
+// The C layer uses the mount points information for its own triage of filename (pdwfs I/O calls vs libc I/O calls).
+// This is necessary as the configuration mechanism is in the Go layer.
 //export InitPdwfs
-func InitPdwfs() {
+func InitPdwfs(mountBuf []byte) {
 	conf := config.New()
 	if dump := os.Getenv("PDWFS_DUMPCONF"); dump != "" {
-		err := conf.Dump()
-		check(err)
+		conf.Dump()
 	}
 	pdwfs = NewPdwFS(conf)
+
+	// writes in mountBuf the mount point paths
+	b := bytes.NewBuffer(mountBuf)
+	for path := range pdwfs.mounts {
+		b.WriteString(path)
+		b.WriteString("@") // separator
+	}
+	b.WriteString("\000") // end sentinel
 }
 
 // FinalizePdwfs is called once when pdwfs.so library is unloaded (gcc destructor attribute)
 //export FinalizePdwfs
 func FinalizePdwfs() {
 	pdwfs.finalize()
-}
-
-//IsFileManaged returns 1 if the directory in argument is managed by pdwfs from config
-//export IsFileManaged
-func IsFileManaged(filename string) int {
-	mount, err := pdwfs.getMount(filename)
-	check(err)
-	if mount != nil {
-		return 1
-	}
-	return 0
-}
-
-//IsFdManaged checks whether a file descriptor is managed
-//export IsFdManaged
-func IsFdManaged(fd int) int {
-	if pdwfs.isFdManaged(fd) {
-		return 1
-	}
-	return 0
 }
 
 var errno C.int
@@ -220,7 +187,7 @@ func setErrno(err C.int) {
 
 //Open implements open libc call
 //export Open
-func Open(filename string, flags int, mode int) int {
+func Open(filename string, flags, mode, fd int) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(filename)
@@ -239,14 +206,13 @@ func Open(filename string, flags int, mode int) int {
 		}
 		return -1
 	}
-	cFile, err := pdwfs.registerFile(&file)
-	check(err)
-	return int(C.fileno(cFile))
+	try(pdwfs.registerFile(fd, &file))
+	return fd
 }
 
 //Fopen implements fopen libc call
 //export Fopen
-func Fopen(filename string, mode string) *C.FILE {
+func Fopen(filename string, mode string, fd int) int {
 	pdwfs.lock.Lock()
 	defer pdwfs.lock.Unlock()
 	mount, err := pdwfs.getMount(filename)
@@ -272,11 +238,10 @@ func Fopen(filename string, mode string) *C.FILE {
 		} else {
 			panic(fmt.Sprintf("unhandled %T in Fopen: %s", err, err))
 		}
-		return (*C.FILE)(C.NULL)
+		return -1
 	}
-	cFile, err := pdwfs.registerFile(&file)
-	check(err)
-	return cFile
+	try(pdwfs.registerFile(fd, &file))
+	return fd
 }
 
 //Close implements close libc call
@@ -287,11 +252,8 @@ func Close(fd int) int {
 	file, err := pdwfs.getFileFromFd(fd)
 	check(err)
 
-	err = (*file).Close()
-	check(err) // no known conversion to errno, just panic if err != nil
-
-	err = pdwfs.closeFd(fd)
-	check(err)
+	try((*file).Close()) // no known conversion to errno, just panic if err != nil
+	try(pdwfs.removeFd(fd))
 	return 0
 }
 
@@ -304,6 +266,7 @@ func Write(fd int, buf []byte) int {
 	check(err)
 
 	n, err := (*file).Write(buf)
+
 	check(err) // no known conversion to errno, just panic if err != nil
 	return n
 }
@@ -658,13 +621,13 @@ func Lstat64(filename string, stats *C.struct_stat64) int {
 
 func statfs() syscall.Statfs_t {
 	return syscall.Statfs_t{
-		Type:   0x0BD00BD0, // we fake a Lustre file system, see lustre_user.h (ext2 is 0xEF53, see man statfs)
-		Bsize:  1,          // block size
-		Blocks: 1,          // number of blocks
-		Bfree:  1,          // total free blocks
-		Bavail: 1,          // free blocks available to user (unpriviledged)
-		Files:  1,          // total file nodes in fs
-		Ffree:  1,          // free file nodes in fs
+		Type:   0xEF53, // ext2 filesystem
+		Bsize:  1,      // block size
+		Blocks: 1,      // number of blocks
+		Bfree:  1,      // total free blocks
+		Bavail: 1,      // free blocks available to user (unpriviledged)
+		Files:  1,      // total file nodes in fs
+		Ffree:  1,      // free file nodes in fs
 	}
 }
 

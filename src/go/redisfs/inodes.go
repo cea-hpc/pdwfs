@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// The Inode layer manages inodes as either regular files or a directories and associated metadata.
+// The metadata is reduced the bare minimum on purpose (to reduce bottlenecks of handling metadata).
 
 package redisfs
 
@@ -19,203 +22,79 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/cea-hpc/pdwfs/config"
 )
-
-//InodeRegister ...
-type InodeRegister struct {
-	mountConf *config.Mount
-	client    IRedisClient
-	fiMap     map[string]*Inode
-	root      *Inode
-}
 
 //Inode object
 type Inode struct {
-	mountConf   *config.Mount
-	client      IRedisClient
-	id          string
-	redisBuf    *RedisBlockedBuffer
-	mtx         *sync.RWMutex
-	metaBaseKey string
-	isDir       *bool
-	mode        *os.FileMode
+	dataStore *DataStore
+	redisRing *RedisRing
+	path      string
+	keyPrefix string
+	mtx       *sync.RWMutex
 }
 
-//NewInodeRegister constructor
-func NewInodeRegister(redisConf *config.Redis, mountConf *config.Mount) *InodeRegister {
-	client := NewRedisClient(redisConf)
-
-	// create root inode
-	root := NewInode(mountConf, client, mountConf.Path)
-	root.initMeta(true, 0600)
-
-	return &InodeRegister{
-		mountConf: mountConf,
-		client:    client,
-		fiMap:     map[string]*Inode{mountConf.Path: root},
-		root:      root,
-	}
-}
-
-//Finalize ...
-func (ir *InodeRegister) Finalize() error {
-	return ir.client.Close()
-}
-
-//CreateInode ...
-func (ir *InodeRegister) CreateInode(path string, dir bool, mode os.FileMode, parent *Inode) *Inode {
-
-	inode := NewInode(ir.mountConf, ir.client, path)
-	inode.initMeta(dir, mode)
-
-	parent.setChild(inode)
-	ir.fiMap[inode.ID()] = inode
-	return inode
-}
-
-func (ir *InodeRegister) getInode(id string) (*Inode, bool) {
-	if i, ok := ir.fiMap[id]; ok {
-		return i, true
-	}
-	i := NewInode(ir.mountConf, ir.client, id)
-
-	if ok, _ := i.exists(); !ok {
-		return nil, false
-	}
-	ir.fiMap[id] = i
-	return i, true
-}
-
-func (ir *InodeRegister) getChildren(inode *Inode) ([]*Inode, error) {
-	IDs := inode.childrenID()
-	children := make([]*Inode, 0, len(IDs))
-	for _, id := range IDs {
-		child, ok := ir.getInode(id)
-		if !ok {
-			panic("Inode not found")
-		}
-		children = append(children, child)
-	}
-	return children, nil
-}
-
-func (ir *InodeRegister) getFile(inode *Inode, flag int) (File, error) {
-	if inode.IsDir() {
-		return nil, ErrIsDirectory
-	}
-	inodeBuf := inode.getBuffer()
-
-	if hasFlag(os.O_TRUNC, flag) {
-		inodeBuf.Clear()
-	}
-
-	var f File = NewMemFile(inodeBuf, inode.Name(), inode.mtx)
-
-	if hasFlag(os.O_APPEND, flag) {
-		f.Seek(0, os.SEEK_END)
-	} else {
-		f.Seek(0, os.SEEK_SET)
-	}
-	if hasFlag(os.O_RDWR, flag) {
-		return f, nil
-	} else if hasFlag(os.O_WRONLY, flag) {
-		f = &woFile{f}
-	} else {
-		f = &roFile{f}
-	}
-
-	return f, nil
-}
-
-func (ir *InodeRegister) delete(inode *Inode) {
-	if buf := inode.getBuffer(); buf != nil {
-		buf.Clear()
-	}
-	children, _ := ir.getChildren(inode)
-	for _, child := range children {
-		ir.delete(child)
-	}
-	delete(ir.fiMap, inode.Name())
-	err := inode.delMeta()
-	if err != nil {
-		panic(err)
-	}
-}
-
-//NewInode ...
-func NewInode(mountConf *config.Mount, client IRedisClient, id string) *Inode {
+//NewInode returns a new Inode object
+func NewInode(dataStore *DataStore, ring *RedisRing, path string) *Inode {
 	return &Inode{
-		mountConf:   mountConf,
-		client:      client,
-		id:          id,
-		mtx:         &sync.RWMutex{},
-		metaBaseKey: "{" + id + "}", // hastag to ensure all metadata keys goes on the same instance
+		dataStore: dataStore,
+		redisRing: ring,
+		path:      path,
+		mtx:       &sync.RWMutex{},
+		keyPrefix: "{" + path + "}", // key prefix is in curly braces to ensure all metadata keys goes on the same instance (see RedisRing)
 	}
 }
-func (i *Inode) getBuffer() *RedisBlockedBuffer {
-	if i.redisBuf == nil && !i.IsDir() {
-		i.redisBuf = NewRedisBlockedBuffer(i.mountConf, i.client, i.ID())
+
+// check if the inode object already exists in pdwfs (check in Redis)
+func (i *Inode) exists() bool {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	ret, err := client.Exists(i.keyPrefix + ":mode")
+	Check(err)
+	return ret
+}
+
+// creates the metadata in Redis of a newly created Inode in pdwfs
+func (i *Inode) initMeta(isDir bool, mode os.FileMode) {
+	pipeline := i.redisRing.GetClient(i.keyPrefix).Pipeline()
+	if isDir {
+		pipeline.Do("SADD", i.keyPrefix+":children", "")
 	}
-	return i.redisBuf
-}
-func (i *Inode) exists() (bool, error) {
-	if i.mode != nil {
-		return true, nil
-	}
-	ret, err := i.client.Exists(i.metaBaseKey + ":mode").Result()
-	return ret != 0, err
+	pipeline.Do("SETNX", i.keyPrefix+":mode", []byte(strconv.FormatInt(int64(mode), 10)))
+	pipeline.Flush()
 }
 
-func (i *Inode) initMeta(isDir bool, mode os.FileMode) error {
-	pipeline := i.client.Pipeline()
-	pipeline.SetNX(i.metaBaseKey+":isDir", isDir, 0)
-	pipeline.SetNX(i.metaBaseKey+":mode", uint32(mode), 0)
-	_, err := pipeline.Exec()
-	return err
+// delete the metadata from Redis
+func (i *Inode) delMeta() {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	Try(client.Unlink(i.keyPrefix+":children", i.keyPrefix+":mode"))
 }
 
-func (i *Inode) delMeta() error {
-	pipeline := i.client.Pipeline()
-	pipeline.Del(i.metaBaseKey + ":children")
-	pipeline.Del(i.metaBaseKey + ":isDir")
-	pipeline.Del(i.metaBaseKey + ":mode")
-	_, err := pipeline.Exec()
-	return err
-}
-
-//IsDir ...
+//IsDir returns true if inode is a directory
 func (i *Inode) IsDir() bool {
-	if i.isDir == nil {
-		res := i.client.Get(i.metaBaseKey+":isDir").Val() == "1"
-		i.isDir = &res
-	}
-	return (*i.isDir)
+	//FIXME: cache the query
+	client := i.redisRing.GetClient(i.keyPrefix)
+	res, err := client.Exists(i.keyPrefix + ":children")
+	Check(err)
+	return res
 }
 
 //Mode returns the inode access mode
 func (i *Inode) Mode() os.FileMode {
-	if i.mode == nil {
-		val := i.client.Get(i.metaBaseKey + ":mode").Val()
-		res, err := strconv.Atoi(val)
-		if err != nil {
-			panic(err)
-		}
-		m := os.FileMode(res)
-		i.mode = &m
-	}
-	return (*i.mode)
+	client := i.redisRing.GetClient(i.keyPrefix)
+	val, err := client.Get(i.keyPrefix + ":mode")
+	Check(err)
+	res, err := strconv.ParseInt(string(val), 10, 64)
+	Check(err)
+	return os.FileMode(res)
 }
 
-//ID returns the ID of the file
-func (i *Inode) ID() string {
-	return i.id
+//Path returns the Path of the file
+func (i *Inode) Path() string {
+	return i.path
 }
 
-//Name returns the inode base name
+//Name returns the inode base name (for os.FileInfo interface)
 func (i *Inode) Name() string {
-	return i.ID()
+	return i.path
 }
 
 //Sys no op (to fulfill os.FileMode interface)
@@ -233,17 +112,76 @@ func (i *Inode) Size() int64 {
 	if i.IsDir() {
 		return 0
 	}
-	return i.getBuffer().Size()
+	return i.dataStore.GetSize(i.path)
 }
 
-func (i *Inode) childrenID() []string {
-	return i.client.SMembers(i.metaBaseKey + ":children").Val()
+// records a child inode to the current inode
+func (i *Inode) setChild(child *Inode) {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	Try(client.SAdd(i.keyPrefix+":children", child.Path()))
 }
 
-func (i *Inode) setChild(child *Inode) error {
-	return i.client.SAdd(i.metaBaseKey+":children", child.ID()).Err()
+// removes a child inode from the current inode children list
+func (i *Inode) removeChild(child *Inode) {
+	client := i.redisRing.GetClient(i.keyPrefix)
+	Try(client.SRem(i.keyPrefix+":children", child.Path()))
 }
 
-func (i *Inode) removeChild(child *Inode) error {
-	return i.client.SRem(i.metaBaseKey+":children", child.ID()).Err()
+// returns a list of children inodes
+func (i *Inode) getChildren() ([]*Inode, error) {
+	if !i.IsDir() {
+		return nil, ErrNotDirectory
+	}
+	client := i.redisRing.GetClient(i.keyPrefix)
+	paths, err := client.SMembers(i.keyPrefix + ":children")
+	Check(err)
+	children := make([]*Inode, 0, len(paths)-1)
+	for _, path := range paths {
+		if path != "" {
+			children = append(children, NewInode(i.dataStore, i.redisRing, path))
+		}
+	}
+	return children, nil
+}
+
+// returns a File object wrapping the current inode
+func (i *Inode) getFile(flag int) (File, error) {
+	if i.IsDir() {
+		return nil, ErrIsDirectory
+	}
+
+	if hasFlag(os.O_TRUNC, flag) {
+		i.dataStore.Remove(i.path)
+	}
+
+	var f File = NewMemFile(i.dataStore, i.path, i.mtx)
+
+	if hasFlag(os.O_APPEND, flag) {
+		f.Seek(0, os.SEEK_END)
+	} else {
+		f.Seek(0, os.SEEK_SET)
+	}
+	if hasFlag(os.O_RDWR, flag) {
+		return f, nil
+	} else if hasFlag(os.O_WRONLY, flag) {
+		f = &woFile{f}
+	} else {
+		f = &roFile{f}
+	}
+
+	return f, nil
+}
+
+// removes the current inode (file content, children, metadata)
+func (i *Inode) remove() {
+	if !i.IsDir() {
+		i.dataStore.Remove(i.path)
+	} else {
+		if children, _ := i.getChildren(); children != nil {
+			for _, child := range children {
+				child.remove()
+			}
+		}
+	}
+	i.delMeta()
 }

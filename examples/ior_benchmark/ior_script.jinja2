@@ -1,0 +1,16 @@
+IOR START
+  api={{ api }}
+  verbose=0
+  testFile=testFile
+  writeFile=1
+  readFile={{ read }}
+  numTasks={{ numTasks }}
+  filePerProc={{ filePerProc }}
+  collective={{ collective }}
+  segmentCount={{ segmentCount }}
+{% for size in transferSize %}
+RUN
+  blockSize={{ size }}
+  transferSize={{ size }}
+{% endfor %}
+IOR STOP

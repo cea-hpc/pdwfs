@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include "tests.h"
 
-void test_mkdir_rmdir() {
+int test_mkdir_rmdir() {
 
     int ret = mkdir(TESTDIR, 0777);
     assert(ret == 0);
@@ -38,8 +38,6 @@ void test_mkdir_rmdir() {
 
     err = stat(TESTDIR, &dirstats);
     assert(err != 0);
-}
 
-int main() {
-    test_mkdir_rmdir();
+    return 0;
 }

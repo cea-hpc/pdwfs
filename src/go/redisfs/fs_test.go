@@ -15,38 +15,46 @@
 package redisfs
 
 import (
+	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+	"reflect"
+
+	"github.com/cea-hpc/pdwfs/util"
 )
 
 func TestCreate(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
+
 	// NewRedisFS file with absolute path
 	{
 		f, err := fs.OpenFile("/testfile", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-		Ok(t, err)
-		Equals(t, "/testfile", f.Name(), "Wrong name")
+		util.Ok(t, err)
+		util.Equals(t, "/testfile", f.Name(), "Wrong name")
 	}
 
 	// NewRedisFS same file again
 	{
 		_, err := fs.OpenFile("/testfile", os.O_RDWR|os.O_CREATE, 0666)
-		Ok(t, err)
+		util.Ok(t, err)
 
 	}
 
 	// NewRedisFS same file again, but truncate it
 	{
 		_, err := fs.OpenFile("/testfile", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-		Ok(t, err)
+		util.Ok(t, err)
 	}
 
 	// NewRedisFS same file again with O_CREATE|O_EXCL, which is an error
@@ -67,36 +75,39 @@ func TestCreate(t *testing.T) {
 }
 
 func TestCreateRelative(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	cwd, err := os.Getwd()
-	Ok(t, err)
+	util.Ok(t, err)
 	mountConf.Path = cwd
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
+
 	// NewRedisFS file with relative path (workingDir == root)
 	{
 		f, err := fs.OpenFile("relFile", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-		Ok(t, err)
-		Equals(t, filepath.Join(cwd, "relFile"), f.Name(), "Wrong name")
+		util.Ok(t, err)
+		util.Equals(t, filepath.Join(cwd, "relFile"), f.Name(), "Wrong name")
 	}
 }
 
 func TestMkdirAbs(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	// NewRedisFS dir with absolute path
 	{
 		err := fs.Mkdir("/usr", 0)
-		Ok(t, err)
+		util.Ok(t, err)
 	}
 
 	// NewRedisFS dir twice
@@ -109,40 +120,42 @@ func TestMkdirAbs(t *testing.T) {
 }
 
 func TestMkdirRel(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	cwd, err := os.Getwd()
-	Ok(t, err)
+	util.Ok(t, err)
 	mountConf.Path = cwd
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	// NewRedisFS dir with relative path
 	{
 		err := fs.Mkdir("home", 0)
-		Ok(t, err)
+		util.Ok(t, err)
 	}
 }
 
 func TestMkdirTree(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	err := fs.Mkdir("/home", 0)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	err = fs.Mkdir("/home/blang", 0)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	err = fs.Mkdir("/home/blang/goprojects", 0)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	err = fs.Mkdir("/home/johndoe/goprojects", 0)
 	if err == nil {
@@ -152,33 +165,51 @@ func TestMkdirTree(t *testing.T) {
 	//TODO: Subdir of file
 }
 
-func TestReadDir(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+func TestMkdirMountPath(t *testing.T) {
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
+	mountConf.Path = "/foo"
+
+	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
+
+	err := fs.Mkdir("/foo", 0)
+	util.Ok(t, err)
+
+	err = fs.Mkdir("/foo/bar", 0)
+	util.Ok(t, err)
+}
+
+func TestReadDir(t *testing.T) {
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
+
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	dirs := []string{"/home", "/home/linus", "/home/rob", "/home/pike", "/home/blang"}
 	expectNames := []string{"/home/README.txt", "/home/blang", "/home/linus", "/home/pike", "/home/rob"}
 	for _, dir := range dirs {
 		err := fs.Mkdir(dir, 0777)
-		Ok(t, err)
+		util.Ok(t, err)
 	}
 	f, err := fs.OpenFile("/home/README.txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	f.Close()
 
 	fis, err := fs.ReadDir("/home")
-	Ok(t, err)
+	util.Ok(t, err)
 
-	Equals(t, len(fis), len(expectNames), "Wrong size")
+	util.Equals(t, len(fis), len(expectNames), "Wrong size")
 
 	for i, n := range expectNames {
-		Equals(t, n, fis[i].Name(), "Wrong name")
+		util.Equals(t, n, fis[i].Name(), "Wrong name")
 	}
 
 	// Readdir empty directory
@@ -206,22 +237,23 @@ func TestReadDir(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	err := fs.Mkdir("/tmp", 0777)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	f, err := fs.OpenFile("/tmp/README.txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	_, err = f.Write([]byte("test"))
-	Ok(t, err)
+	util.Ok(t, err)
 
 	f.Close()
 
@@ -237,7 +269,7 @@ func TestRemove(t *testing.T) {
 
 	// remove created file
 	err = fs.Remove("/tmp/README.txt")
-	Ok(t, err)
+	util.Ok(t, err)
 
 	if _, err = fs.OpenFile("/tmp/README.txt", os.O_RDWR, 0666); err == nil {
 		t.Errorf("Could open removed file!")
@@ -248,14 +280,14 @@ func TestRemove(t *testing.T) {
 		t.Errorf("Could not create removed file!")
 	}
 	fi, err := fs.Stat(f.Name())
-	Ok(t, err)
+	util.Ok(t, err)
 
 	if fi.Size() != 0 {
 		t.Errorf("Error in Size, got %d (expecting 0)", fi.Size())
 	}
 
 	err = fs.Remove("/tmp")
-	Ok(t, err)
+	util.Ok(t, err)
 
 	if fis, err := fs.ReadDir("/"); err != nil {
 		t.Errorf("Readdir error: %s", err)
@@ -265,16 +297,17 @@ func TestRemove(t *testing.T) {
 }
 
 func TestReadWrite(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	f, err := fs.OpenFile("/readme.txt", os.O_CREATE|os.O_RDWR, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	// Write first dots
 	if n, err := f.Write([]byte(dots)); err != nil {
@@ -321,16 +354,17 @@ func TestReadWrite(t *testing.T) {
 }
 
 func TestOpenRO(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	f, err := fs.OpenFile("/readme.txt", os.O_CREATE|os.O_RDONLY, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	// Write first dots
 	if _, err := f.Write([]byte(dots)); err == nil {
@@ -340,16 +374,16 @@ func TestOpenRO(t *testing.T) {
 }
 
 func TestOpenWO(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
 
 	f, err := fs.OpenFile("/readme.txt", os.O_CREATE|os.O_WRONLY, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	// Write first dots
 	if n, err := f.Write([]byte(dots)); err != nil {
@@ -373,16 +407,17 @@ func TestOpenWO(t *testing.T) {
 }
 
 func TestOpenAppend(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	f, err := fs.OpenFile("/readme.txt", os.O_CREATE|os.O_RDWR, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	// Write first dots
 	if n, err := f.Write([]byte(dots)); err != nil {
@@ -420,10 +455,10 @@ func TestOpenAppend(t *testing.T) {
 }
 
 func TestTruncateToLength(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	var params = []struct {
@@ -439,7 +474,7 @@ func TestTruncateToLength(t *testing.T) {
 	for _, param := range params {
 		fs := NewRedisFS(redisConf, mountConf)
 		f, err := fs.OpenFile("/readme.txt", os.O_CREATE|os.O_RDWR, 0666)
-		Ok(t, err)
+		util.Ok(t, err)
 		if n, err := f.Write([]byte(dots)); err != nil {
 			t.Errorf("Unexpected error: %s", err)
 		} else if n != len(dots) {
@@ -459,7 +494,7 @@ func TestTruncateToLength(t *testing.T) {
 		}
 
 		b, err := readFile(fs, "/readme.txt")
-		Ok(t, err)
+		util.Ok(t, err)
 
 		if int64(len(b)) != newSize {
 			t.Errorf("File should be empty after truncation: %d", len(b))
@@ -469,17 +504,19 @@ func TestTruncateToLength(t *testing.T) {
 		} else if fi.Size() != newSize {
 			t.Errorf("Filesize should be %d after truncation", newSize)
 		}
+		fs.Finalize()
 	}
 }
 
 func TestTruncateToZero(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	const content = "read me"
 
@@ -488,12 +525,12 @@ func TestTruncateToZero(t *testing.T) {
 	}
 
 	f, err := fs.OpenFile("/readme.txt", os.O_RDWR|os.O_TRUNC, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	f.Close()
 
 	b, err := readFile(fs, "/readme.txt")
-	Ok(t, err)
+	util.Ok(t, err)
 
 	if len(b) != 0 {
 		t.Errorf("File should be empty after truncation")
@@ -506,19 +543,20 @@ func TestTruncateToZero(t *testing.T) {
 }
 
 func TestStat(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	f, err := fs.OpenFile("/readme.txt", os.O_CREATE|os.O_RDWR, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	fi, err := fs.Stat(f.Name())
-	Ok(t, err)
+	util.Ok(t, err)
 
 	if s := fi.Size(); s != int64(0) {
 		t.Errorf("Invalid size: %d", s)
@@ -537,7 +575,7 @@ func TestStat(t *testing.T) {
 	}
 
 	fi, err = fs.Stat(f.Name())
-	Ok(t, err)
+	util.Ok(t, err)
 
 	// File name is abs name
 	if name := f.Name(); name != "/readme.txt" {
@@ -572,19 +610,20 @@ func readFile(fs *RedisFS, name string) ([]byte, error) {
 }
 
 func TestVolumesConcurrentAccess(t *testing.T) {
-	client, redisConf := GetRedisClient()
-	defer client.FlushAll()
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	mountConf := util.GetMountPathConf()
 	mountConf.Path = "/"
 
 	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
 
 	f1, err := fs.OpenFile("/testfile", os.O_RDWR|os.O_CREATE, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	f2, err := fs.OpenFile("/testfile", os.O_RDWR, 0666)
-	Ok(t, err)
+	util.Ok(t, err)
 
 	// f1 write dots
 	if n, err := f1.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -608,4 +647,67 @@ func TestVolumesConcurrentAccess(t *testing.T) {
 		t.Errorf("Unexpected read error: %d %s, res: %s", n, err, string(p))
 	}
 
+}
+
+var (
+	bigdata = bytes.Repeat([]byte("0123456789"), 200000) // 2MB
+)
+
+func TestBenchOpenWriteClose(t *testing.T) {
+	redis, redisConf := util.InitRedisTestServer()
+	defer redis.Stop()
+
+	mountConf := util.GetMountPathConf()
+	mountConf.Path = "/"
+	mountConf.StripeSize = 10 * 1024 * 1024
+
+	fs := NewRedisFS(redisConf, mountConf)
+	defer fs.Finalize()
+
+	allstart := time.Now()
+
+	f, err := fs.OpenFile("/testfile", os.O_RDWR|os.O_CREATE, 0666)
+	util.Ok(t, err)
+
+	openelapsed := time.Since(allstart)
+	fmt.Println("Open took: ", openelapsed)
+
+	writestart := time.Now()
+	// f write bigdata
+	if n, err := f.Write(bigdata); err != nil || n != len(bigdata) {
+		t.Errorf("Unexpected write error: %d %s", n, err)
+	}
+
+	writeelapsed := time.Since(writestart)
+	fmt.Println("Write took: ", writeelapsed)
+
+	closestart := time.Now()
+	if err := f.Close(); err != nil {
+		t.Errorf("Unexpected close error: %s", err)
+	}
+	closeelapsed := time.Since(closestart)
+	fmt.Println("Close took: ", closeelapsed)
+
+	reopen := time.Now()
+	f, err = fs.OpenFile("/testfile", os.O_RDONLY, 0666)
+	util.Ok(t, err)
+	reopenelapsed := time.Since(reopen)
+	fmt.Println("Reopen took: ", reopenelapsed)
+
+	readstart := time.Now()
+	// f read bigdata
+	readBuf := make([]byte, len(bigdata), len(bigdata))
+	if n, err := f.Read(readBuf); err != nil || n != len(bigdata) {
+		t.Errorf("Unexpected read error: %d %s", n, err)
+	}
+	readelapsed := time.Since(readstart)
+	fmt.Println("Read took: ", readelapsed)
+
+	allelapsed := time.Since(allstart)
+	fmt.Println("TestOpenWriteClose took: ", allelapsed)
+
+	if !reflect.DeepEqual(bigdata, readBuf) {
+		fmt.Println("read data does not match written data: exp: ", bigdata[:10], "act: ", readBuf[:10])
+		t.FailNow()
+	}
 }

@@ -22,7 +22,7 @@
 #include <sys/uio.h>
 #include "tests.h"
 
-void test_pwritev() {
+int test_pwritev() {
 
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -55,8 +55,6 @@ void test_pwritev() {
 
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_pwritev();
+    return 0;
 }

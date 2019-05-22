@@ -20,6 +20,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/cea-hpc/pdwfs/config"
+	"github.com/cea-hpc/pdwfs/util"
 )
 
 const (
@@ -28,28 +31,29 @@ const (
 )
 
 var (
-	large = strings.Repeat("0123456789", 200) // 2000 bytes
+	large = strings.Repeat("0123456789", 200)     // 2000 bytes
+	huge  = strings.Repeat("0123456789", 2000000) // 20 MB
 )
 
-func setupMemFile(t *testing.T) (*MemFile, IRedisClient) {
-	client, _ := GetRedisClient()
-	conf := GetMountPathConf()
-
-	buf := NewRedisBuffer(conf, client, "Key")
-	f := NewMemFile(buf, "/path/to/file", &sync.RWMutex{})
-	return f, client
+func setupMemFile(t *testing.T) (*MemFile, *util.RedisTestServer, *DataStore) {
+	redis, conf := util.InitRedisTestServer()
+	store := NewDataStore(NewRedisRing(conf), config.DefaultStripeSize)
+	f := NewMemFile(store, "/path/to/file", &sync.RWMutex{})
+	return f, redis, store
 }
 
 func TestFileInterface(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
+	defer client.Close()
 
 	_ = File(f)
 }
 
 func TestWrite(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
+	defer client.Close()
 
 	// Write first dots
 	if n, err := f.Write([]byte(dots)); err != nil {
@@ -123,11 +127,19 @@ func TestWrite(t *testing.T) {
 	} else if n != len(large) {
 		t.Errorf("Invalid write count: %d", n)
 	}
+
+	// Write huge
+	if n, err := f.Write([]byte(huge)); err != nil {
+		t.Errorf("Unexpected error: %s", err)
+	} else if n != len(huge) {
+		t.Errorf("Invalid write count: %d", n)
+	}
 }
 
 func TestSeek(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
+	defer client.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -155,8 +167,9 @@ func TestSeek(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
+	defer client.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -176,8 +189,9 @@ func TestRead(t *testing.T) {
 }
 
 func TestReadAt(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
+	defer client.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {
@@ -213,8 +227,9 @@ func TestReadAt(t *testing.T) {
 }
 
 func TestSize(t *testing.T) {
-	f, client := setupMemFile(t)
-	defer client.FlushAll()
+	f, redis, client := setupMemFile(t)
+	defer redis.Stop()
+	defer client.Close()
 
 	// write dots
 	if n, err := f.Write([]byte(dots)); err != nil || n != len(dots) {

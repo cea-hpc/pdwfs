@@ -1,4 +1,20 @@
-FROM golang:1.11.5 
+FROM centos:latest 
+
+RUN yum -y update && yum -y install \
+	wget \
+	gcc \
+	make \
+	strace \
+	git \
+	glib2-devel \
+	yum clean all
+
+# Go language
+RUN wget -O go.tar.gz 'https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz' && \
+	tar xf go.tar.gz -C /usr/local && \
+	rm go.tar.gz
+
+ENV PATH "/usr/local/go/bin:$PATH"
 
 ENV GO111MODULE=on
 

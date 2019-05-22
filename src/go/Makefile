@@ -1,7 +1,6 @@
 BUILDDIR=../../build
-SCRIPTSDIR=../../scripts
 
-GO_FILES = $(wildcard config/*.go) $(wildcard redisfs/*.go) 
+GO_FILES = $(shell find . -type f -name '*.go') 
 
 $(BUILDDIR)/lib/libpdwfs_go.so: $(GO_FILES)
 	go build -mod=vendor -o $@ -buildmode=c-shared
@@ -13,4 +12,9 @@ clean:
 
 test:
 	go vet -mod=vendor ./...
-	go test -mod=vendor ./...
+	# count=1 deactivate test results caching
+	go test -mod=vendor -failfast -race -count=1 -timeout 15s ./...  
+
+tidy:
+	go mod tidy
+	go mod vendor

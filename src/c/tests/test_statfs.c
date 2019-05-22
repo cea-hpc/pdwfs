@@ -20,7 +20,7 @@
 #include <sys/statfs.h>
 #include "tests.h"
 
-void test_statfs() {
+int test_statfs() {
     
     int fd = open(TESTFILE, O_CREAT|O_RDWR, 0777);
     CHECK_ERROR(fd, "open")
@@ -31,13 +31,11 @@ void test_statfs() {
     CHECK_ERROR(err, "statfs")
     
     if (getenv("PDWFS")) {
-        // if running on pdwfs, we check it "fakes" a Lustre filesystem (see lustre_user.h)
-        assert(fsstats.f_type == 0x0BD00BD0);
+        // if running on pdwfs, we check it "fakes" an ext2 filesystem
+        assert(fsstats.f_type == 0xEF53);
     }
     close(fd);
     unlink(TESTFILE);
-}
 
-int main() {
-    test_statfs();
+    return 0;
 }

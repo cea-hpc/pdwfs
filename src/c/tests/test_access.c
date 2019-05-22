@@ -19,7 +19,7 @@
 #include <assert.h>
 #include "tests.h"
 
-void test_access() {
+int test_access() {
 
     int ret = access(TESTFILE, F_OK);
     assert(ret == -1);
@@ -35,8 +35,6 @@ void test_access() {
 
     ret = access(TESTFILE, F_OK);
     assert(ret == -1);
-}
 
-int main() {
-    test_access();
+    return 0;
 }

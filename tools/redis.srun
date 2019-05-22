@@ -1,0 +1,119 @@
+#!/bin/bash
+
+# Copyright 2019 CEA
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+usage="Usage: $(basename "$0") [-hvni] ADDR
+
+Launch and manage multiple Redis instances on local host
+
+where:
+    -h      show this help
+    -v      verbose
+    -n      number of Redis instances to launch (default: 1)
+    -i      network interface to bind Redis server to
+    ADDR    address (host:port) of central Redis instance gathering information of other instances"
+
+while getopts ':hvn:i:' opt; do
+    case "$opt" in
+    h)  echo "$usage"
+        exit
+        ;;
+    v)  verbose=1
+        ;;
+    n)  nInstances=$OPTARG
+        ;;
+    i)  nic=$OPTARG
+        ;;
+    :)  printf "Error: missing argument for -%s\n" "$OPTARG"
+        echo "$usage"
+        exit 1
+        ;;
+    \?) printf "Error: illegal option: -%s\n" "$OPTARG"
+        echo "$usage"
+        exit 1
+        ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+if [[ -z "$nInstances" ]]; then
+    nInstances=1
+fi
+
+if [ -z "$*" ]; then
+    echo "Error: missing address of central Redis instance"
+    echo "$usage"
+    exit 1
+fi
+
+centralRedis=$*
+
+get-ip() {
+    local nic=$1
+    local ip=""
+    if [[ "$nic" == "default" ]]; then
+        # no network interface specified, pick the first one
+        ip=`hostname -I | awk '{print $1}'`
+    else
+        # get the IP from the specified network interface
+        ip=`ip -4 addr show $nic | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1`
+    fi
+    if [[ "$ip" == "" ]]; then
+        echo "Error, no ip address found for NIC: $nic"
+        exit 1
+    fi
+    echo $ip
+}
+
+stop-redis() {
+    local port=$1
+    local nic=$2
+    ip=`get-ip $nic`
+	addr=$ip:$port
+    if [[ -n "$verbose" ]]; then
+	    echo "[PDWFS] Stopping Redis instance on `hostname` at $addr"
+    fi
+    redis-cli -h $ip -p $port shutdown
+	redis-cli -u redis://$centralRedis srem addr $addr > /dev/null
+    redis-cli -u redis://$centralRedis rpush waitkey 1 > /dev/null
+}
+
+start-redis() {
+    local port=$1
+    local nic=$2
+    ip=`get-ip $nic`
+    addr=$ip:$port
+    if [[ -n "$verbose" ]]; then
+	    echo "[PDWFS] Starting Redis instance on `hostname` at $addr"
+    fi
+    redis-server --daemonize yes --save "" --protected-mode no --bind $ip --port $port > /dev/null
+	redis-cli -u redis://$centralRedis sadd addr $addr > /dev/null
+    redis-cli -u redis://$centralRedis rpush waitkey 1 > /dev/null
+}
+
+# start local Redis instances
+for ((port=6379;port<6379+$nInstances;port++)); do
+    start-redis $port $nic
+done
+
+# block until order received from central Redis instance
+redis-cli -u redis://$centralRedis brpoplpush order order 0 > /dev/null
+
+# stop local Redis instances
+for ((port = 6379; port < 6379 + $nInstances; port++)); do
+    stop-redis $port $nic
+done
+

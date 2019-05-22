@@ -17,38 +17,38 @@ package redisfs
 import (
 	"os"
 	"testing"
+
+	"github.com/cea-hpc/pdwfs/util"
 )
 
 func TestInodeMeta(t *testing.T) {
-	client, _ := GetRedisClient()
-	//defer client.FlushAll()
+	redis, confRedis := util.InitRedisTestServer()
+	defer redis.Stop()
 
-	mountConf := GetMountPathConf()
+	confMount := util.GetMountPathConf()
 
-	i := NewInode(mountConf, client, "id")
+	ring := NewRedisRing(confRedis)
+	defer ring.Close()
+	store := NewDataStore(ring, int64(confMount.StripeSize))
+	defer store.Close()
 
-	res, err := i.exists()
-	Ok(t, err)
-	Equals(t, false, res, "no metadata expected")
+	i := NewInode(store, ring, "id")
 
-	err = i.initMeta(true, 0600)
-	Ok(t, err)
+	res := i.exists()
+	util.Equals(t, false, res, "no metadata expected")
 
-	res, err = i.exists()
-	Ok(t, err)
-	Equals(t, true, res, "metadata expected")
+	i.initMeta(true, 0600)
 
-	err = i.initMeta(false, 0777) // should be a no op
-	Ok(t, err)
+	res = i.exists()
+	util.Equals(t, true, res, "metadata expected")
+
+	i.initMeta(false, 0777) // should be a no op
 
 	d := i.IsDir()
-	Ok(t, err)
-	Equals(t, d, true, "should be a dir")
+	util.Equals(t, d, true, "should be a dir")
 
 	m := i.Mode()
-	Ok(t, err)
-	Equals(t, m, os.FileMode(0600), "should be 0600 mode")
+	util.Equals(t, m, os.FileMode(0600), "should be 0600 mode")
 
-	err = i.delMeta()
-	Ok(t, err)
+	i.delMeta()
 }
