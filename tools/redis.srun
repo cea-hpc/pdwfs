@@ -84,7 +84,7 @@ stop-redis() {
     ip=`get-ip $nic`
 	addr=$ip:$port
     if [[ -n "$verbose" ]]; then
-	    echo "[PDWFS] Stopping Redis instance on $addr"
+	    echo "[PDWFS] Stopping Redis instance on `hostname` at $addr"
     fi
     redis-cli -h $ip -p $port shutdown
 	redis-cli -u redis://$centralRedis srem addr $addr > /dev/null
@@ -97,7 +97,7 @@ start-redis() {
     ip=`get-ip $nic`
     addr=$ip:$port
     if [[ -n "$verbose" ]]; then
-	    echo "[PDWFS] Starting Redis instance on $addr"
+	    echo "[PDWFS] Starting Redis instance on `hostname` at $addr"
     fi
     redis-server --daemonize yes --save "" --protected-mode no --bind $ip --port $port > /dev/null
 	redis-cli -u redis://$centralRedis sadd addr $addr > /dev/null
