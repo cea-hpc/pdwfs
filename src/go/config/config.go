@@ -26,7 +26,7 @@ import (
 )
 
 // DefaultStripeSize is the default maximum size of file stripe
-const DefaultStripeSize = 10 * 1024 * 1024 // 10MB
+const DefaultStripeSize = 50 * 1024 * 1024 // 50MB
 const maxRedisString = 512 * 1024 * 1024   // 512MB
 
 func try(err error) {
