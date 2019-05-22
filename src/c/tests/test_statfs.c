@@ -31,8 +31,8 @@ int test_statfs() {
     CHECK_ERROR(err, "statfs")
     
     if (getenv("PDWFS")) {
-        // if running on pdwfs, we check it "fakes" a Lustre filesystem (see lustre_user.h)
-        assert(fsstats.f_type == 0x0BD00BD0);
+        // if running on pdwfs, we check it "fakes" an ext2 filesystem
+        assert(fsstats.f_type == 0xEF53);
     }
     close(fd);
     unlink(TESTFILE);

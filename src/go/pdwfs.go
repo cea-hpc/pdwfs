@@ -621,13 +621,13 @@ func Lstat64(filename string, stats *C.struct_stat64) int {
 
 func statfs() syscall.Statfs_t {
 	return syscall.Statfs_t{
-		Type:   0x0BD00BD0, // we fake a Lustre file system, see lustre_user.h (ext2 is 0xEF53, see man statfs)
-		Bsize:  1,          // block size
-		Blocks: 1,          // number of blocks
-		Bfree:  1,          // total free blocks
-		Bavail: 1,          // free blocks available to user (unpriviledged)
-		Files:  1,          // total file nodes in fs
-		Ffree:  1,          // free file nodes in fs
+		Type:   0xEF53, // ext2 filesystem
+		Bsize:  1,      // block size
+		Blocks: 1,      // number of blocks
+		Bfree:  1,      // total free blocks
+		Bavail: 1,      // free blocks available to user (unpriviledged)
+		Files:  1,      // total file nodes in fs
+		Ffree:  1,      // free file nodes in fs
 	}
 }
 
