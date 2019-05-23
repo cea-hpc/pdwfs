@@ -138,6 +138,17 @@ func (c *RedisClient) Get(key string) ([]byte, error) {
 	return b, err
 }
 
+// Strlen command
+func (c *RedisClient) Strlen(key string) (int, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+	l, err := redis.Int(conn.Do("STRLEN", key))
+	if err == redis.ErrNil {
+		return l, ErrRedisKeyNotFound
+	}
+	return l, err
+}
+
 // GetInto implements GET redis command with an input destination buffer to read bytes into.
 // The actual number of bytes read is returned.
 // If dst is too small, it will panic.
