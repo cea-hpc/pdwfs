@@ -31,6 +31,8 @@ type Inode struct {
 	path      string
 	keyPrefix string
 	mtx       *sync.RWMutex
+	isDir     *bool
+	mode      *os.FileMode
 }
 
 //NewInode returns a new Inode object
@@ -70,21 +72,27 @@ func (i *Inode) delMeta() {
 
 //IsDir returns true if inode is a directory
 func (i *Inode) IsDir() bool {
-	//FIXME: cache the query
-	client := i.redisRing.GetClient(i.keyPrefix)
-	res, err := client.Exists(i.keyPrefix + ":children")
-	Check(err)
-	return res
+	if i.isDir == nil {
+		client := i.redisRing.GetClient(i.keyPrefix)
+		res, err := client.Exists(i.keyPrefix + ":children")
+		Check(err)
+		i.isDir = &res
+	}
+	return *i.isDir
 }
 
 //Mode returns the inode access mode
 func (i *Inode) Mode() os.FileMode {
-	client := i.redisRing.GetClient(i.keyPrefix)
-	val, err := client.Get(i.keyPrefix + ":mode")
-	Check(err)
-	res, err := strconv.ParseInt(string(val), 10, 64)
-	Check(err)
-	return os.FileMode(res)
+	if i.mode == nil {
+		client := i.redisRing.GetClient(i.keyPrefix)
+		val, err := client.Get(i.keyPrefix + ":mode")
+		Check(err)
+		res, err := strconv.ParseInt(string(val), 10, 64)
+		Check(err)
+		m := os.FileMode(res)
+		i.mode = &m
+	}
+	return *i.mode
 }
 
 //Path returns the Path of the file
