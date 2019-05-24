@@ -2,9 +2,9 @@
 
 [![Build Status](https://travis-ci.org/cea-hpc/pdwfs.png?branch=master)](https://travis-ci.org/cea-hpc/pdwfs)
 
-pdwfs (we like to pronounce it "*padawan-f-s*", see below) is a preload library implementing a distributed in-memory filesystem in user space suitable for intercepting *bulk* I/O workloads typical of HPC simulations. It is using [Redis](https://redis.io) as the backend memory store.
+pdwfs (we like to pronounce it "*padawan-f-s*", see [below](#padawan-project)) is a preload library implementing a distributed in-memory filesystem in user space suitable for intercepting *bulk* I/O workloads typical of HPC simulations. It is using [Redis](https://redis.io) as the backend memory store.
 
-pdwfs objective is to provide a lightweight infrastructure to execute HPC simulation workflows without writing/reading any intermediate data to/from a (parallel) filesystem. This type of approach is known as *in transit* or *loosely-coupled in situ*, see the two next sections for further details.
+pdwfs objective is to provide a lightweight infrastructure to execute HPC simulation workflows without writing/reading any intermediate data to/from a (parallel) filesystem, but rather staging it in memory. This type of approach is known as *in transit* or *loosely-coupled in situ* and is further explained in  a [section](#in-situ-and-in-transit-hpc-workflows) below.
 
 pdwfs is written in [Go](https://golang.org) and C and runs on Linux systems only (we provide a Dockerfile for testing and development on other systems).
 
@@ -47,7 +47,9 @@ $ make PREFIX=/usr/local/pdwfs install
 
 ### Using Spack
 
-pdwfs and its dependencies (even Go) can be installed with the package manager [Spack](https://spack.io).
+pdwfs and its dependencies (Redis and Go) can be installed with the package manager [Spack](https://spack.io).
+
+NOTE: at the time of this writing, the latest Spack release (v0.12.1) does not have the Redis package, it is only available in the develop branch. Still, the Redis package python file can easily be copy-pasted in your Spack installation.
 
 A Spack package for pdwfs is not yet available in Spack upstream repository, but is available [here](https://github.com/cea-hpc/pdwfs/releases/download/v0.2.0/pdwfs-spack.py).
 
@@ -230,7 +232,7 @@ The foundational work for this project was an initial version of pdwfs entierly 
 
 - *PaDaWAn: a Python Infrastructure for Loosely-Coupled In Situ Workflows*, J. Capul, S. Morais, J-B. Lekien, ISAV@SC (2018).
 
-## In situ / in transit HPC workflows
+## In situ and in transit HPC workflows
 Within the HPC community, in situ data processing is getting quite some interests as a potential enabler for future exascale-era simulations. 
 
 The original in situ approach, also called tightly-coupled in situ, consists in executing data processing routines within the same address space as the simulation and sharing the resources with it. It requires the simulation to use a dedicated API and to link against a library embedding a processing runtime. Notable in situ frameworks are ParaView [Catalyst](https://www.paraview.org/in-situ/), VisIt [LibSim](https://wci.llnl.gov/simulation/computer-codes/visit). [SENSEI](http://sensei-insitu.org) provides a common API that can map to various in situ processing backends.
