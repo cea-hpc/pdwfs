@@ -1,5 +1,11 @@
 # Changelog
 
+## vO.2.1
+
+- Fix a memory corruption issue by passing a copy of pathnames from C to Go [2f9e3db]
+- Update README.md [f893f1e]
+- Add file metadata caching in client [0a098e0]
+
 ## v0.2.0
 
 - Add Spack package for pdwfs [b6cb1f2]

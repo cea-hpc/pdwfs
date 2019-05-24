@@ -29,7 +29,7 @@ A binary distribution is available for Linux system and x86_64 architecture in t
 The following steps will install pdwfs and make it available in your PATH.
 
 ```bash
-$ wget -O pdwfs.tar.gz https://github.com/cea-hpc/pdwfs/releases/download/v0.2.0/pdwfs-v0.2.0-linux-amd64.tar.gz
+$ wget -O pdwfs.tar.gz https://github.com/cea-hpc/pdwfs/releases/download/v0.2.1/pdwfs-v0.2.1-linux-amd64.tar.gz
 $ mkdir /usr/local/pdwfs
 $ tar xf pdwfs.tar.gz --strip-component=1 -C /usr/local/pdwfs
 $ export PATH="/usr/local/pdwfs/bin:$PATH" 
@@ -51,14 +51,14 @@ pdwfs and its dependencies (Redis and Go) can be installed with the package mana
 
 NOTE: at the time of this writing, the latest Spack release (v0.12.1) does not have the Redis package, it is only available in the develop branch. Still, the Redis package python file can easily be copy-pasted in your Spack installation.
 
-A Spack package for pdwfs is not yet available in Spack upstream repository, but is available [here](https://github.com/cea-hpc/pdwfs/releases/download/v0.2.0/pdwfs-spack.py).
+A Spack package for pdwfs is not yet available in Spack upstream repository, but is available [here](https://github.com/cea-hpc/pdwfs/releases/download/v0.2.1/pdwfs-spack.py).
 
 To add pdwfs package to your Spack installation, you can proceed as follows:
 
 ```bash
 $ export DIR=$SPACK_ROOT/var/spack/repos/builtin/pdwfs
 $ mkdir $DIR
-$ wget -O $DIR/package.py https://github.com/cea-hpc/pdwfs/releases/download/v0.2.0/pdwfs-spack.py
+$ wget -O $DIR/package.py https://github.com/cea-hpc/pdwfs/releases/download/v0.2.1/pdwfs-spack.py
 $ spack spec pdwfs  # check everything is OK
 ```
 
