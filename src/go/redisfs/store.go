@@ -235,9 +235,9 @@ func (s DataStore) GetSize(name string) int64 {
 		return 0
 	}
 	key := key(name, ilast)
-	lastStripe, err := s.redisRing.GetClient(key).Get(key)
+	l, err := s.redisRing.GetClient(key).Strlen(key)
 	Check(err)
-	return ilast*s.stripeSize + int64(len(lastStripe))
+	return ilast*s.stripeSize + int64(l)
 }
 
 // helper to obtain the last stripe ID and length based on the total size and stripe size

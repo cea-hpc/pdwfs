@@ -219,7 +219,7 @@ int open(const char *pathname, int flags, ...) {
         return libc_open(pathname, flags, mode);
     }
 
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
 
     int fd = get_new_fd(fd_register);
 
@@ -510,7 +510,7 @@ int access(const char *pathname, int mode) {
     if PATH_NOT_MANAGED(pathname) {
         return libc_access(pathname, mode);
     }
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
     return Access(filename, mode);
 }
 
@@ -520,7 +520,7 @@ int unlink(const char *pathname) {
     if PATH_NOT_MANAGED(pathname) {
         return libc_unlink(pathname);
     }
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
     int ret = Unlink(filename);
     if (ret < 0) {
         errno = GetErrno();
@@ -534,7 +534,7 @@ int __xstat(int vers, const char *pathname, struct stat *buf) {
     if PATH_NOT_MANAGED(pathname) {
         return libc__xstat(vers, pathname, buf);
     }
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
     return Stat(filename, buf);
 }
 
@@ -544,7 +544,7 @@ int __xstat64(int vers, const char *pathname, struct stat64 *buf) {
     if PATH_NOT_MANAGED(pathname) {
         return libc__xstat64(vers, pathname, buf);
     }
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
     return Stat64(filename, buf);
 }
 
@@ -554,7 +554,7 @@ int __lxstat(int vers, const char *pathname, struct stat *buf) {
     if PATH_NOT_MANAGED(pathname) {
         return libc__lxstat(vers, pathname, buf);
     }
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
     return Lstat(filename, buf);
 }
 
@@ -564,7 +564,7 @@ int __lxstat64(int vers, const char *pathname, struct stat64 *buf) {
     if PATH_NOT_MANAGED(pathname) {
         return libc__lxstat64(vers, pathname, buf);
     }
-    GoString filename = {pathname, strlen(pathname)};
+    GoString filename = {strdup(pathname), strlen(pathname)};
     return Lstat64(filename, buf);
 }
 
@@ -592,7 +592,7 @@ int statfs(const char *path, struct statfs *buf) {
     if PATH_NOT_MANAGED(path) {
         return libc_statfs(path,  buf);
     }
-    GoString filename = {path, strlen(path)};
+    GoString filename = {strdup(path), strlen(path)};
     return Statfs(filename, buf);
 }
 
@@ -602,7 +602,7 @@ int statfs64(const char *path, struct statfs64 *buf) {
     if PATH_NOT_MANAGED(path) {
         return libc_statfs64(path,  buf);
     }
-    GoString filename = {path, strlen(path)};
+    GoString filename = {strdup(path), strlen(path)};
     return Statfs64(filename, buf);
 }
 
@@ -641,8 +641,8 @@ FILE* fopen(const char *path, const char *mode) {
     }
 
     FILE *stream = get_new_stream(fd_register);
-    GoString gopath = {path, strlen(path)};
-    GoString gomode = {mode, strlen(mode)};
+    GoString gopath = {strdup(path), strlen(path)};
+    GoString gomode = {strdup(mode), strlen(mode)};
     int ret = Fopen(gopath, gomode, fileno(stream));
     if (ret < 0) {
         remove_fd(fd_register, fileno(stream));
@@ -1007,7 +1007,6 @@ int openat(int dirfd, const char *pathname, int flags, ...) {
         }
 
     TRACE("intercepting openat(dirfd=%d, pathname=%s, flags=%d, mode=%d) (PASS THOUGH)\n", dirfd, pathname, flags, mode)
-    // NOTE: see the comment of func (fs *PdwFS) registerFile in pdwfs.go before implementing openat interception
     return libc_openat(dirfd, pathname, flags, mode);
 }
 
@@ -1017,7 +1016,7 @@ int mkdir(const char *pathname, mode_t mode) {
     if PATH_NOT_MANAGED(pathname) {
         return libc_mkdir(pathname, mode);
     }
-    GoString gopath = {pathname, strlen(pathname)};
+    GoString gopath = {strdup(pathname), strlen(pathname)};
     return Mkdir(gopath, mode);
 }
 
@@ -1032,7 +1031,7 @@ int rmdir(const char *pathname) {
     if PATH_NOT_MANAGED(pathname) {
         return libc_rmdir(pathname);
     }
-    GoString gopath = {pathname, strlen(pathname)};
+    GoString gopath = {strdup(pathname), strlen(pathname)};
     return Rmdir(gopath);
 }
 
@@ -1079,7 +1078,7 @@ int statvfs(const char *pathname, struct statvfs *buf) {
     if PATH_NOT_MANAGED(pathname) {
         return libc_statvfs(pathname, buf);
     }
-    GoString gopath = {pathname, strlen(pathname)};
+    GoString gopath = {strdup(pathname), strlen(pathname)};
     return Statvfs(gopath, buf);
 }
 
@@ -1089,7 +1088,7 @@ int statvfs64(const char *pathname, struct statvfs64 *buf) {
     if PATH_NOT_MANAGED(pathname) {
         return libc_statvfs64(pathname, buf);
     }
-    GoString gopath = {pathname, strlen(pathname)};
+    GoString gopath = {strdup(pathname), strlen(pathname)};
     return Statvfs64(gopath, buf);
 }
 
