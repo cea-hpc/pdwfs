@@ -22,10 +22,12 @@ class Pdwfs(MakefilePackage):
     """
 
     homepage = "https://github.com/cea-hpc/pdwfs"
-    url      = "https://github.com/cea-hpc/pdwfs/archive/v0.1.2.tar.gz"
+    url      = "https://github.com/cea-hpc/pdwfs/archive/v0.2.1.tar.gz"
     git      = "https://github.com/cea-hpc/pdwfs.git"
 
     version('develop', branch='develop')
+    version('0.2.1', sha256='66cbac76218d1625eefd9e49ae0a8da813f5644f86fa4a761bd264a51ddddb20')
+    version('0.2.0', sha256='b33bfdbd54dc1d8832f41b01f715b2317c2fbc309d1b73699e72439bc58e99fa')
     version('0.1.2', sha256='78336ee06985d6ffa7a5e13ecb368cd0f39bcaeb84f99d54337823bce1eba371')
 
     depends_on('go@1.11:', type='build')
