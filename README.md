@@ -199,7 +199,7 @@ Test cases have been successfully run so far with the followig codes and tools:
 - [ParaView](https://www.paraview.org/in-situ/) VTK file reader.
 
 
-## Examples
+## Docker-packaged examples
 We provide a set of Dockerfiles to test on a laptop the codes and tools described in the Validation section.
 
 - **Example 1**: HydroC + ParaView + FFmpeg workflow
