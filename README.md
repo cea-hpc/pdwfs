@@ -2,9 +2,9 @@
 
 [![Build Status](https://travis-ci.org/cea-hpc/pdwfs.png?branch=master)](https://travis-ci.org/cea-hpc/pdwfs)
 
-pdwfs (we like to pronounce it "*padawan-f-s*", see [below](#padawan-project)) is a preload library implementing a distributed in-memory filesystem in user space suitable for intercepting *bulk* I/O workloads typical of HPC simulations. It is using [Redis](https://redis.io) as the backend memory store.
+pdwfs (we like to pronounce it "*padawan-f-s*", see [below](#padawan-project)) is a preload library implementing a simplified distributed in-memory filesystem in user space suitable for intercepting *bulk* I/O workloads typical of HPC simulations. It is using [Redis](https://redis.io) as the backend memory store.
 
-pdwfs objective is to provide a lightweight infrastructure to execute HPC simulation workflows without writing/reading any intermediate data to/from a (parallel) filesystem, but rather staging it in memory. This type of approach is known as *in transit* or *loosely-coupled in situ* and is further explained in  a [section](#in-situ-and-in-transit-hpc-workflows) below.
+pdwfs objective is to provide a user-friendly and lightweight software-defined infrastructure to execute HPC simulation workflows without writing/reading any intermediate data to/from a (parallel) filesystem. Instead, data is staged in memory. This type of approach is known as *in transit* or *loosely-coupled in situ* and is further explained in  a [section](#in-situ-and-in-transit-hpc-workflows) below.
 
 pdwfs is written in [Go](https://golang.org) and C and runs on Linux systems only (we provide a Dockerfile for testing and development on other systems).
 
@@ -163,7 +163,7 @@ $ salloc -N 12 --exclusive ./ior_pdwfs.sh
 
 ## How does it work ?
 
-pdwfs used the often-called "LD_PRELOAD trick" to intercept a set of I/O-related function calls provided by the C standard library (libc).
+pdwfs uses LD_PRELOAD to intercept a set of I/O-related function calls provided by the C standard library (libc).
 
 The pdwfs CLI script execute the user command passed in argument with the LD_PRELOAD environment variable set to the installation path of the pdwfs.so shared library.
 
@@ -176,16 +176,16 @@ The category of calls currently implemented are:
 ## Performance
 
 To address the challenge of being competitive with parallel filesystems, an initial set of design choices and trade-offs have been made:
+- drasticaly limiting the amount of metadata and metadata manipulations by opting not to implement typical filesystem features such as linking, renaming, access rights, timestamping, etc.
 - no central metadata server, metadata are distributed accross Redis instances,
-- drasticaly limiting the amount of metadata and metadata manipulations by opting not to implement typical filesystem features such as linking, renaming and timestamping
-- selecting the widely used database Redis to benefit from its mix of performance, simplicity and flexibility (and performance is an important part of the mix),
+- selecting the widely used database Redis to benefit from its mix of performance, simplicity and flexibility,
 - files are stripped accross multiple Redis instances with a predefined layout (by configuration), no metadata query for read/write,
-- being a simple infrastructure in user space allows adjustement and configuration on a per-simulation or per-workflow basis for increased efficiency.
+- being a simple software-defined infrastructure in user space allows adjustement and configuration on a per-simulation or per-workflow basis for increased efficiency.
 
 With this set of choices, we expect our infrastructure to be horizontally scalable (adding more Redis instances to accomodate higher loads) and to accomodate certain I/O loads that are known to be detrimental for parallel filesystem (many files).
 
 On the other hand, a few factors are known for impacting performance versus parallel filesystems:
-- Redis uses TCP communications while parallel filesystems rely on RDMA,
+- Redis uses TCP communications while parallel filesystems rely on lower-level communication protocols like RDMA,
 - intercepting I/O calls and the use of CGO (system to call Go from C) adds some overhead to the calls,
 
 Obvisouly, proper benchmarking at scale will have to be performed to assess pdwfs performances. Yet, considering these design choices and our past experience with PaDaWAn in designing in transit infrastructure, we are hopefull that we will get decent performances.
