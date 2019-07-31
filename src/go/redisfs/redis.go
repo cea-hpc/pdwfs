@@ -20,8 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
-
+	
 	"github.com/cea-hpc/pdwfs/config"
 	"github.com/cea-hpc/pdwfs/redigo/redis"
 	"github.com/cea-hpc/pdwfs/util"
@@ -58,7 +57,7 @@ func NewRedisClient(addr string) *RedisClient {
 			MaxIdle:     5,
 			MaxActive:   50,   // max active connection at the same time
 			Wait:        true, // throttles goroutines to MaxActive goroutines
-			IdleTimeout: 240 * time.Second,
+			IdleTimeout: 0,
 			Dial: func() (redis.Conn, error) {
 				return redis.Dial("tcp", addr)
 			},
