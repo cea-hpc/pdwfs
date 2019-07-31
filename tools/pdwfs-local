@@ -1,0 +1,183 @@
+#!/bin/bash
+
+# Copyright 2019 CEA
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# 
+# Manage a pdwfs session with local Redis instances
+
+
+# Helpers and constants
+
+
+SESSION_FILE=./pdwfs.session
+
+fail() {
+	local msg=$1
+	if [[ -n "$msg" ]]; then
+		echo "$msg"
+	fi
+	echo "export PDWFS_STATUS=FAILED" > $SESSION_FILE
+	exit 1
+}
+
+
+##############################################
+#          pdwfs-local command               #
+##############################################
+
+usage="Usage: $(basename "$0") [-h] COMMAND
+
+Initialize and manage a pdwfs session with local Redis instances.
+
+where:
+	-h     	show this help
+	COMMAND [init|finalize] a pdwfs session"
+
+while getopts ':h' opt; do
+    case "$opt" in
+    h)  echo "$usage"
+        exit
+        ;;
+    :)  printf "Error: missing argument for -%s\n" "$OPTARG"
+        fail "$usage"
+        ;;
+    \?) printf "Error: illegal option: -%s\n" "$OPTARG"
+        fail "$usage"
+        ;;
+    esac
+done
+shift "$((OPTIND - 1))"
+
+command=$1
+if [[ -z "$command" ]]; then
+	echo "Error: no command specified"
+	fail "$usage"
+fi
+shift
+
+
+
+
+##############################################
+#             init command                  #
+##############################################
+
+if [ "$command" == init ]; then
+
+	usage_init="Usage: $(basename "$0") init [-hNnpi]
+
+	Initialize a new pdwfs session by launching multiple Redis instances
+	on local machine and creating a session environment file to be sourced.
+
+	The following command must be executed after pdwfs-local init:
+	$ source pdwfs.session
+
+	where:
+		-h	show this help
+		-n	number of Redis instances (default: 1)"
+
+	while getopts ':hn:' opt; do
+		case "$opt" in
+		h)  echo "$usage_init"
+			exit
+			;;
+		n)	nInstances=$OPTARG
+			;;
+		:)  printf "Error: missing argument for -%s\n" "$OPTARG"
+			fail "$usage_init"
+			;;
+		\?) printf "Error: illegal option: -%s\n" "$OPTARG"
+			fail "$usage_init"
+			;;
+		esac
+	done
+	shift "$((OPTIND - 1))"
+
+	rm -f $SESSION_FILE
+	
+	# normalize options
+	if [[ -z "$nInstances" ]]; then nInstances=1; fi
+
+	# create session file
+	echo -n "export PDWFS_REDIS=" > $SESSION_FILE
+
+	# launch the instances
+	for i in $(seq 1 $nInstances); do
+		port=$((6378+i))
+		redis-server --daemonize yes --save "" --port $port > /dev/null
+		echo -n ":$port," >> $SESSION_FILE
+		until [ `redis-cli -p $port ping | grep -c PONG` = 1 ]; do echo -n "."; sleep 1; done
+		sleep 0.1; echo OK
+	done | pv -N "[PDWFS][init] Launch Redis instances ($nInstances)" -p -l -s $nInstances -i 0.2 > /dev/null
+
+	# finalize session file
+	echo "" >> $SESSION_FILE
+	echo "export PDWFS_REDIS_INSTANCES=$nInstances" >> $SESSION_FILE
+
+
+##############################################
+#             finalize command               #
+##############################################
+
+elif [ "$command" == finalize ]; then
+
+	usage_finalize="Usage: $(basename "$0") finalize [-h]
+
+	Finalize pdwfs session by stopping Redis instances.
+
+	where:
+		-h	show this help"
+
+	while getopts ':h' opt; do
+		case "$opt" in
+		h)  echo "$usage_finalize"
+			exit
+			;;
+		:)  printf "Error: missing argument for -%s\n" "$OPTARG"
+			fail "$usage_finalize"
+			;;
+		\?) printf "Error: illegal option: -%s\n" "$OPTARG"
+			fail "$usage_finalize"
+			;;
+		esac
+	done
+	shift "$((OPTIND - 1))"
+
+	# source session environment file
+	if ! source $SESSION_FILE; then
+		fail "[PDWFS][finalize] Error: session env file $SESSION_FILE not found"
+	fi
+	
+	# check status of init command
+	if [ "$PDWFS_STATUS" == "FAILED" ]; then
+		fail "[PDWFS][finalize] Error: pdwfs-local init command failed"
+	fi
+
+	nInstances=$PDWFS_REDIS_INSTANCES
+
+	# stop Redis instances
+	for i in $(seq 1 $nInstances); do
+		port=$((6378+i))
+		#redis-cli -p $port save
+		redis-cli -p $port shutdown
+		sleep 0.1; echo OK
+	done | pv -N "[PDWFS][finalize] Stop Redis instances ($nInstances) " -p -l -s $nInstances -i 0.2 > /dev/null
+	
+else
+	echo "Error: wrong command specified"
+	fail "$usage"
+fi
+
+
