@@ -86,8 +86,9 @@ stop-redis() {
     if [[ -n "$verbose" ]]; then
 	    echo "[PDWFS] Stopping Redis instance on `hostname` at $addr"
     fi
-    redis-cli -h $ip -p $port shutdown
-	redis-cli -u redis://$centralRedis srem addr $addr > /dev/null
+    #redis-cli -h $ip -p $port save
+    redis-cli -h $ip -p $port shutdown	
+    redis-cli -u redis://$centralRedis srem addr $addr > /dev/null
     redis-cli -u redis://$centralRedis rpush waitkey 1 > /dev/null
 }
 
@@ -100,12 +101,14 @@ start-redis() {
 	    echo "[PDWFS] Starting Redis instance on `hostname` at $addr"
     fi
     redis-server --daemonize yes --save "" --protected-mode no --bind $ip --port $port > /dev/null
-	redis-cli -u redis://$centralRedis sadd addr $addr > /dev/null
+    sleep 0.2
+    until [ `redis-cli -h $ip -p $port ping | grep -c PONG` = 1 ]; do echo -n "."; sleep 1; done
+    redis-cli -u redis://$centralRedis sadd addr $addr > /dev/null
     redis-cli -u redis://$centralRedis rpush waitkey 1 > /dev/null
 }
 
 # start local Redis instances
-for ((port=6379;port<6379+$nInstances;port++)); do
+for ((port = 6379; port < 6379 + $nInstances; port++)); do
     start-redis $port $nic
 done
 
