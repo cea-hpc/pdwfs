@@ -20,7 +20,7 @@
 
 # Helpers and constants
 
-SESSION_FILE=pdwfs.session
+SESSION_FILE=./pdwfs.session
 
 cleanup_session() {
 	if [ -f $SESSION_FILE ]; then
