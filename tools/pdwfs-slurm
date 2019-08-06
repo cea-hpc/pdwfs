@@ -146,7 +146,7 @@ if [ "$command" == init ]; then
 	fi
 
 	# launch the remote instances
-	srun -N $nNodes --ntasks-per-node 1 -c $nInstances --exclusive redis.srun -i $nic -n $nInstances $CENTRAL_REDIS &
+	srun -N $nNodes -n $nNodes --ntasks-per-node 1 -c $nInstances --exclusive redis.srun -i $nic -n $nInstances $CENTRAL_REDIS &
 	if [[ "$?" != "0" ]]; then
 		fail "[PDWFS][init] Error: failed to launch the remote Redis instances"
 	fi
