@@ -17,16 +17,26 @@
 # 
 # Manage a pdwfs session using SLURM to launch Redis instances on compute nodes
 
+# for debugging
+#set -x
 
 # Helpers and constants
 
 SESSION_FILE=./pdwfs.session
 
 cleanup_session() {
-	if [ -f $SESSION_FILE ]; then
-		source $SESSION_FILE
-		redis-cli -u redis://$PDWFS_CENTRAL_REDIS shutdown &> /dev/null
-	fi
+	# get addresses of all redis-servers running locally
+	servers_addr=`pgrep -ax redis-server | awk 'NF>1{print $NF}'`
+	
+	# loop of the redis-servers
+	while read -r addr; do
+		# if redis-server is tagged for pdwfs (key pdwfs exists), we shut it down
+		if [ ! -z "$addr" ] && [ `redis-cli -u redis://$addr exists pdwfs` -eq 1 ]; then
+			redis-cli -u redis://$addr shutdown &> /dev/null
+		fi
+	done <<< "$servers_addr"
+
+	rm -rf $SESSION_FILE
 }
 
 fail() {
@@ -130,7 +140,6 @@ if [ "$command" == init ]; then
 
 	# cleanup previous session if any
 	cleanup_session
-	rm -f $SESSION_FILE
 	
 	# start central Redis instance to help managing remote instances
 	echo "[PDWFS][init] Start central Redis instance on `hostname`:$port"
@@ -144,6 +153,9 @@ if [ "$command" == init ]; then
 	if ! redis-cli -u redis://$CENTRAL_REDIS ping > /dev/null; then 
 		fail "[PDWFS][init] Error: the central Redis instance is not responding"
 	fi
+
+	# tag instance for pdwfs
+	redis-cli -u redis://$CENTRAL_REDIS set pdwfs 1 > /dev/null
 
 	# launch the remote instances
 	srun -N $nNodes -n $nNodes --ntasks-per-node 1 -c $nInstances --exclusive redis.srun -i $nic -n $nInstances $CENTRAL_REDIS &
