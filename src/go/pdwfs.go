@@ -533,6 +533,8 @@ func stat(filename string, stats *C.struct_stat) int {
 	if err != nil {
 		if os.IsNotExist(err) {
 			setErrno(C.ENOENT)
+		} else if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrParentDirNotExist {
+			setErrno(C.ENOENT)
 		} else {
 			panic(fmt.Sprintf("unhandled %T in stat: %s", err, err))
 		}
@@ -563,6 +565,8 @@ func stat64(filename string, stats *C.struct_stat64) int {
 	inode, err := mount.Stat(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
+			setErrno(C.ENOENT)
+		} else if e, ok := err.(*os.PathError); ok && e.Err == redisfs.ErrParentDirNotExist {
 			setErrno(C.ENOENT)
 		} else {
 			panic(fmt.Sprintf("unhandled %T in stat: %s", err, err))
