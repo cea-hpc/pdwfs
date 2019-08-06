@@ -109,5 +109,7 @@ ssize_t libc_getline(char **buf, size_t *bufsiz, FILE *stream);
 DIR* libc_opendir(const char* path);
 int libc_feof(FILE *stream);
 int libc_ferror(FILE *stream);
+ssize_t libc_getxattr(const char *path, const char *name, void *value,  size_t size);
+
 
 #endif

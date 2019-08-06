@@ -1193,3 +1193,15 @@ int ferror(FILE *stream) {
     }
     NOT_IMPLEMENTED("ferror")
 }
+
+ssize_t getxattr(const char *path, const char *name, void *value,  size_t size) {
+    TRACE("intercepting getxattr(path=%s, name=%s, value=%p, size=%d)\n", path, name, value, size)
+    
+    if PATH_NOT_MANAGED(path) {
+        return libc_getxattr(path, name, value, size);
+    }
+    // hack for CEA computing facility relying on some extended attributes
+    // TODO: intercept setxattr to record attributes instead ?
+    errno = EOPNOTSUPP;
+    return -1;
+}
