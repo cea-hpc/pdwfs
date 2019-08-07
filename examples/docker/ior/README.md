@@ -9,13 +9,13 @@ We also provide a Makefile which does the plumbing for you. So, to build and run
 ```
 $ git clone https://github.com/cea-hpc/pdwfs
 $ cd pdwfs
-$ make -C examples/ior_benchmark run
+$ make -C examples/docker/ior run
 ```
 
 When the Jupyter notebook server is up and running, open your browser on your host at http://localhost:8888, open the notebook *ior_example.ipynb* and follow the steps.
 
 This example also allows to run the benchmark in a non-interactive way and save the results in the output directory. To run the benchmark this way, just type:
 ```
-$ make -C examples/ior_benchmark bench
+$ make -C examples/docker/ior bench
 ```
 Once finished it will show you the results in your browser. 

@@ -8,12 +8,12 @@ We also provide a Makefile which does the plumbing for you. So, to build and run
 ```
 $ git clone https://github.com/cea-hpc/pdwfs
 $ cd pdwfs
-$ make -C examples/hydroC_ParaView run
+$ make -C examples/docker/hydroC_ParaView run
 ```
 Once you are in the container, just follow the help message to run the workflow with pdwfs.
 
 Once the workflow has run, go back to your host (not the container) and type the following command to watch the movie you just produced:
 
 ```
-$ make -C examples/hydroC_ParaView watch
+$ make -C examples/docker/hydroC_ParaView watch
 ```

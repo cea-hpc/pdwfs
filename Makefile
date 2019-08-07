@@ -50,4 +50,4 @@ dist:
 	tools/create_tarballs.sh
 
 bench:
-	make -C examples/ior_benchmark bench
+	make -C examples/docker/ior bench
