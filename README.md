@@ -8,6 +8,22 @@ pdwfs objective is to provide a user-friendly and lightweight software-defined i
 
 pdwfs is written in [Go](https://golang.org) and C and runs on Linux systems only (we provide a Dockerfile for testing and development on other systems).
 
+## Content
+
+- [Dependencies](##Dependencies)
+- [Installation](##Installation)
+- [Testing](##Testing)
+- [Quick start](##Quick-start)
+- [Running pdwfs with SLURM](##Running-pdwfs-with-slurm)
+- [How does it work ?](##How-does-it-work-?)
+- [Performance](##Performance)
+- [Validation](##Validation)
+- [Examples](##Examples)
+- [Known limitations and troubleshooting](##Known-limitations-and-troubleshooting)
+- [PaDaWAn project](##PaDaWAn-project)
+- [In situ and in transit HPC workflows](##In-situ-and-in-transit-HPC-workflows)
+- [License](##License)
+- [Acknowledgements](##Acknowledgements)
 
 ## Dependencies
 
@@ -116,7 +132,7 @@ Finally, to stop Redis (and discard all data staged in memory !):
 $ redis-cli shutdown
 ```
 
-## Running pdwfs in a SLURM job
+## Running pdwfs with SLURM
 
 pdwfs comes with a specialized CLI tool called ```pdwfs-slurm``` that simplifies the deployment of Redis instances in a SLURM job.
 
@@ -199,7 +215,7 @@ Test cases have been successfully run so far with the followig codes and tools:
 - [ParaView](https://www.paraview.org/in-situ/) VTK file reader.
 
 
-## Docker-packaged examples
+## Examples
 We provide a set of Dockerfiles to test on a laptop the codes and tools described in the Validation section.
 
 - **Example 1**: HydroC + ParaView + FFmpeg workflow
@@ -218,10 +234,12 @@ $ make -C examples/IOR_benchmark run
 ```
 Yep, you can go grab a second coffee...
 
-## Known limitations
+## Known limitations and troubleshooting
 
 - Works only for dynamically linked executables,
-- Most core or shell utilities for file manipulations (e.g. ls, rm, redirections) requires particular libc calls not implemented,
+- Most core or shell utilities for file manipulations (e.g. ls, rm, redirections) will not work through pdwfs as they require particular libc calls not yet implemented,
+- Issues with Intel Fortran compiler have been observed, for the moment pdwfs is more reliable with GNU Fortran compiler
+- In Fortran, opened files should be explicitely closed in the program (at exit closing operations currently hang the process)
 
 
 ## PaDaWAn project
