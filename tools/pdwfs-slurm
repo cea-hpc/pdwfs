@@ -143,7 +143,7 @@ if [ "$command" == init ]; then
 	
 	# start central Redis instance to help managing remote instances
 	echo "[PDWFS][init] Start central Redis instance on `hostname`:$port"
-	redis-server --port $port --daemonize yes --save "" --protected-mode no > /dev/null
+	redis-server --port $port --daemonize yes --save "" --dbfilename "" --protected-mode no > /dev/null
 	if [[ "$?" != "0" ]]; then
 		fail "[PDWFS][init] Error: failed to start the central Redis instance"
 	fi
