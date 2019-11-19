@@ -17,6 +17,8 @@
 // from libc-testsuite
 
 #include <stdio.h>
+#include <unistd.h>
+#include "tests.h"
 
 #define RUN_TEST(a) { \
 extern int test_ ##a (void); \
@@ -30,6 +32,9 @@ int main()
 {
 	int err=0;
 
+	// clean pre-existing test file
+	unlink(TESTFILE);
+
 	RUN_TEST(access);
 	RUN_TEST(feof);
 	RUN_TEST(fgets);
@@ -38,6 +43,7 @@ int main()
 	RUN_TEST(fputc_fgetc);
 	RUN_TEST(ftruncate);
 	RUN_TEST(fwrite_fread);
+	RUN_TEST(getline_getdelim);
 	RUN_TEST(lseek);
 	RUN_TEST(mkdir_rmdir);
 	RUN_TEST(open_close);

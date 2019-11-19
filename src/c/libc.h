@@ -104,7 +104,7 @@ int libc_statvfs(const char *pathname, struct statvfs *buf);
 int libc_statvfs64(const char *pathname, struct statvfs64 *buf);
 int libc_fstatvfs(int fd, struct statvfs *buf);
 int libc_fstatvfs64(int fd, struct statvfs64 *buf);
-ssize_t libc_getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp);
+ssize_t libc___getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp);
 ssize_t libc_getline(char **buf, size_t *bufsiz, FILE *stream);
 DIR* libc_opendir(const char* path);
 int libc_feof(FILE *stream);

@@ -1110,15 +1110,14 @@ int fstatvfs64(int fd, struct statvfs64 *buf) {
     NOT_IMPLEMENTED("fstatvfs64")
 }
 
-ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *stream) {
-    TRACE("intercepting getdelim(buf=%p, bufsiz=%p, delimiter=%d, stream=%p)\n", buf, bufsiz, delimiter, stream)
+ssize_t __getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *stream) {
+    TRACE("intercepting __getdelim(buf=%p, bufsiz=%p, delimiter=%d, stream=%p)\n", buf, bufsiz, delimiter, stream)
     
     if STREAM_NOT_MANAGED(stream) {
-        return libc_getdelim(buf, bufsiz, delimiter, stream);
+        return libc___getdelim(buf, bufsiz, delimiter, stream);
     }
 
     char *ptr, *eptr;
-
 
 	if (*buf == NULL || *bufsiz == 0) {
 		*bufsiz = BUFSIZ;
@@ -1152,6 +1151,8 @@ ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *stream) {
 		}
     }
 }
+
+ssize_t getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *stream)  __attribute__((alias("__getdelim")));
 
 ssize_t getline(char **buf, size_t *bufsiz, FILE *stream) {
     TRACE("intercepting getline(buf=%p, bufsiz=%p, stream=%p)\n", buf, bufsiz, stream)

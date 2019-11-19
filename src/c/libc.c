@@ -108,7 +108,7 @@ static int (*ptr_statvfs)(const char *pathname, struct statvfs *buf) = NULL;
 static int (*ptr_statvfs64)(const char *pathname, struct statvfs64 *buf) = NULL;
 static int (*ptr_fstatvfs)(int fd, struct statvfs *buf) = NULL;
 static int (*ptr_fstatvfs64)(int fd, struct statvfs64 *buf) = NULL;
-static ssize_t (*ptr_getdelim)(char **buf, size_t *bufsiz, int delimiter, FILE *fp) = NULL;
+static ssize_t (*ptr___getdelim)(char **buf, size_t *bufsiz, int delimiter, FILE *fp) = NULL;
 static ssize_t (*ptr_getline)(char **lineptr, size_t *n, FILE *stream) = NULL; 
 static DIR* (*ptr_opendir)(const char* path) = NULL;
 static int (*ptr_feof)(FILE *stream) = NULL;
@@ -488,8 +488,8 @@ int libc_fstatvfs64(int fd, struct statvfs64 *buf) {
     CALL_NEXT(fstatvfs64, fd, buf)
 }
 
-ssize_t libc_getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp) {
-    CALL_NEXT(getdelim, buf, bufsiz, delimiter, fp)
+ssize_t libc___getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp) {
+    CALL_NEXT(__getdelim, buf, bufsiz, delimiter, fp)
 }
 
 ssize_t libc_getline(char **buf, size_t *bufsiz, FILE *stream) {
