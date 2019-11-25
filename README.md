@@ -1,6 +1,6 @@
 # pdwfs
 
-[![Build Status](https://travis-ci.org/cea-hpc/pdwfs.png?branch=master)](https://travis-ci.org/cea-hpc/pdwfs)
+[![Build Status](https://travis-ci.com/cea-hpc/pdwfs.svg?branch=develop)](https://travis-ci.com/cea-hpc/pdwfs)
 
 pdwfs (we like to pronounce it "*padawan-f-s*", see [below](#padawan-project)) is a preload library implementing a simplified distributed in-memory filesystem in user space suitable for intercepting *bulk* I/O workloads typical of HPC simulations. It is using [Redis](https://redis.io) as the backend memory store.
 
