@@ -267,7 +267,7 @@ func Write(fd int, buf []byte) int {
 
 	n, err := (*file).Write(buf)
 
-	check(err) // no known conversion to errno, just panic if err != nil
+	// check(err) // no known conversion to errno, just panic if err != nil
 	return n
 }
 

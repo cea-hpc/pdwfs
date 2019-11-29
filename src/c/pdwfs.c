@@ -685,14 +685,18 @@ int fflush(FILE *stream) {
 
 int fputc(int c, FILE *stream) {
     TRACE("intercepting fputc(c=%d, stream=%p)\n", c, stream)
-    
+
     if STREAM_NOT_MANAGED(stream) {
         return libc_fputc(c, stream);
     }
     GoSlice cBuf = {(char*)&c, 1, 1};
     int n = Write(fileno(stream), cBuf); 
-	if (n <= 0)
-		return EOF;
+
+    if (n <= 0){
+        stream->_flags |= _IO_ERR_SEEN;
+        return EOF;
+    }
+
 	return c;
 }
 
@@ -737,6 +741,7 @@ int fgetc(FILE *stream) {
     GoSlice cBuf = {&c, 1, 1};
     int n = Read(fileno(stream), cBuf); 
 	if (n == 0)
+        stream->_flags |= _IO_ERR_SEEN;
 		return EOF;
     if (n < 0)
         return n;
@@ -1191,7 +1196,10 @@ int ferror(FILE *stream) {
     if STREAM_NOT_MANAGED(stream) {
         return libc_ferror(stream);
     }
-    NOT_IMPLEMENTED("ferror")
+    
+    return ((stream->_flags & _IO_ERR_SEEN) != 0);
+}
+
 }
 
 ssize_t getxattr(const char *path, const char *name, void *value,  size_t size) {
