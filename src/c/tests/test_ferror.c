@@ -34,6 +34,10 @@ int test_ferror() {
     ret = ferror(f);
     assert(ret != 0);
 
+    clearerr(f);
+    ret = ferror(f);
+    assert(ret == 0);
+
     fclose(f);
 
     f = fopen(TESTFILE, "r");
