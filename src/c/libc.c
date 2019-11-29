@@ -113,6 +113,7 @@ static ssize_t (*ptr_getline)(char **lineptr, size_t *n, FILE *stream) = NULL;
 static DIR* (*ptr_opendir)(const char* path) = NULL;
 static int (*ptr_feof)(FILE *stream) = NULL;
 static int (*ptr_ferror)(FILE *stream) = NULL;
+static void (*ptr_clearerr)(FILE *stream) = NULL;
 static ssize_t (*ptr_getxattr)(const char *path, const char *name, void *value,  size_t size) = NULL;
 
 
@@ -506,6 +507,10 @@ int libc_feof(FILE *stream) {
 
 int libc_ferror(FILE *stream) {
     CALL_NEXT(ferror, stream)
+}
+
+void libc_clearerr(FILE *stream) {
+    CALL_NEXT(clearerr, stream)
 }
 
 ssize_t libc_getxattr(const char *path, const char *name, void *value,  size_t size) {

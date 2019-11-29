@@ -1200,6 +1200,13 @@ int ferror(FILE *stream) {
     return ((stream->_flags & _IO_ERR_SEEN) != 0);
 }
 
+void clearerr(FILE *stream) {
+
+    if STREAM_NOT_MANAGED(stream) {
+        return libc_clearerr(stream);
+    }
+
+    stream->_flags &= ~(_IO_ERR_SEEN|_IO_EOF_SEEN);
 }
 
 ssize_t getxattr(const char *path, const char *name, void *value,  size_t size) {
