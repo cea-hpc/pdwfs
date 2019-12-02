@@ -21,6 +21,7 @@
 
 int test_ferror() {
  
+    // Testing ferror on failing fgetc call
     FILE *f = fopen(TESTFILE, "w");
     CHECK_NULL(f, "fopen")
  
@@ -40,10 +41,36 @@ int test_ferror() {
 
     fclose(f);
 
+    // Testing ferror on failing fread call
+    f = fopen(TESTFILE, "w");
+    CHECK_NULL(f, "fopen")
+
+    size_t n = fwrite("Hello World !\n", 1, 14, f);
+    CHECK_ERROR(n, "fwrite")
+
+    ret = fflush(f);
+    CHECK_ERROR(ret, "fflush")
+
+    char buf[14];
+    n = fread(&buf, 1, 14, f);
+
+    ret = ferror(f);
+    assert(ret != 0);
+
+    fclose(f);
+
+    // Testing ferror on failing fputc and fwrite calls
     f = fopen(TESTFILE, "r");
     CHECK_NULL(f, "fopen")
 
     fputc('A', f);
+    
+    ret = ferror(f);
+    assert(ret != 0);
+
+    clearerr(f);
+    n = fwrite("Hello World !\n", 1, 14, f);
+    CHECK_ERROR(n, "fwrite")
     
     ret = ferror(f);
     assert(ret != 0);

@@ -885,7 +885,19 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
         return libc_fread(ptr, size, nmemb, stream);
     }
     GoSlice buffer = {ptr, size * nmemb, size * nmemb};
-    return Read(fileno(stream), buffer);
+    int ret = Read(fileno(stream), buffer);
+
+    if (ret != nmemb) {
+        if (ret == -1)
+            stream->_flags |= _IO_ERR_SEEN;
+        int fd = fileno(stream);
+        off_t cur_off = lseek(fd, 0, SEEK_CUR);
+        if (cur_off == lseek(fd, 0, SEEK_END)) 
+            stream->_flags |= _IO_EOF_SEEN;
+        lseek(fd, cur_off, SEEK_SET);
+    }
+
+    return ret;
 }
 
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {

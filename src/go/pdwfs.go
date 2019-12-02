@@ -223,6 +223,11 @@ func Fopen(filename string, mode string, fd int) int {
 	case "r":
 		flags = os.O_RDONLY
 	case "w":
+		// flags = os.O_RDWR | os.O_CREATE
+		flags = os.O_WRONLY | os.O_CREATE
+	case "r+":
+		flags = os.O_RDWR
+	case "w+":
 		flags = os.O_RDWR | os.O_CREATE
 	default:
 		panic(fmt.Sprintf("fopen mode '%s' unknown or not implemented yet", mode))
@@ -336,8 +341,9 @@ func Read(fd int, buf []byte) int {
 
 	n, err := (*file).Read(buf)
 	if err != nil && err != io.EOF {
-		panic(err)
-	}
+		// panic(err)
+		return -1;
+	} 
 	return n
 }
 
