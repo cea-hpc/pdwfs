@@ -693,7 +693,7 @@ int fputc(int c, FILE *stream) {
     int n = Write(fileno(stream), cBuf); 
 
     if (n <= 0){
-        stream->_flags |= _IO_ERR_SEEN;
+        stream->_flags |= (_IO_ERR_SEEN|_IO_EOF_SEEN);
         return EOF;
     }
 
@@ -740,11 +740,14 @@ int fgetc(FILE *stream) {
 	char c;
     GoSlice cBuf = {&c, 1, 1};
     int n = Read(fileno(stream), cBuf); 
-	if (n == 0)
-        stream->_flags |= _IO_ERR_SEEN;
+	if (n == 0){
+        stream->_flags |= (_IO_ERR_SEEN|_IO_EOF_SEEN);
 		return EOF;
-    if (n < 0)
+    }
+    if (n < 0){
+        stream->_flags |= _IO_ERR_SEEN;
         return n;
+    }
 	return c;
 }
 
@@ -892,7 +895,12 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
         return libc_fwrite(ptr, size, nmemb, stream);
     }
     GoSlice buffer = {(void*)ptr, size * nmemb, size * nmemb};
-    return Write(fileno(stream), buffer);
+    int ret = Write(fileno(stream), buffer);
+    if (ret != nmemb) {
+        errno = GetErrno();
+        stream->_flags |= _IO_ERR_SEEN;
+    }
+    return ret;
 }
 
 int __fprintf_chk(FILE *stream, int flag, const char *fmt, ...) {
@@ -1182,12 +1190,13 @@ int feof(FILE *stream) {
     if STREAM_NOT_MANAGED(stream) {
         return libc_feof(stream);
     }
-    int fd = fileno(stream);
-    off_t cur_off = lseek(fd, 0, SEEK_CUR);
-    if (cur_off == lseek(fd, 0, SEEK_END))
-        return 1;
-    lseek(fd, cur_off, SEEK_SET);
-    return 0;
+    return (((stream)->_flags & _IO_EOF_SEEN) != 0);
+    // int fd = fileno(stream);
+    // off_t cur_off = lseek(fd, 0, SEEK_CUR);
+    // if (cur_off == lseek(fd, 0, SEEK_END))
+    //     return 1;
+    // lseek(fd, cur_off, SEEK_SET);
+    // return 0;
 }
 
 int ferror(FILE *stream) {
