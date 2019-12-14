@@ -693,7 +693,8 @@ int fputc(int c, FILE *stream) {
     int n = Write(fileno(stream), cBuf); 
 
     if (n <= 0){
-        stream->_flags |= (_IO_ERR_SEEN|_IO_EOF_SEEN);
+        errno = GetErrno();
+        stream->_flags |= _IO_ERR_SEEN;
         return EOF;
     }
 
@@ -741,10 +742,11 @@ int fgetc(FILE *stream) {
     GoSlice cBuf = {&c, 1, 1};
     int n = Read(fileno(stream), cBuf); 
 	if (n == 0){
-        stream->_flags |= (_IO_ERR_SEEN|_IO_EOF_SEEN);
+        stream->_flags |= _IO_EOF_SEEN;
 		return EOF;
     }
     if (n < 0){
+        errno = GetErrno();
         stream->_flags |= _IO_ERR_SEEN;
         return n;
     }
@@ -888,8 +890,10 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     int ret = Read(fileno(stream), buffer);
 
     if (ret != nmemb) {
-        if (ret == -1)
+        errno = GetErrno();
+        if (ret == -1){
             stream->_flags |= _IO_ERR_SEEN;
+        }
         int fd = fileno(stream);
         off_t cur_off = lseek(fd, 0, SEEK_CUR);
         if (cur_off == lseek(fd, 0, SEEK_END)) 
@@ -1199,35 +1203,19 @@ DIR* opendir(const char* path) {
 int feof(FILE *stream) {
     TRACE("intercepting feof(stream=%p)\n", stream)
     
-    if STREAM_NOT_MANAGED(stream) {
-        return libc_feof(stream);
-    }
-    return (((stream)->_flags & _IO_EOF_SEEN) != 0);
-    // int fd = fileno(stream);
-    // off_t cur_off = lseek(fd, 0, SEEK_CUR);
-    // if (cur_off == lseek(fd, 0, SEEK_END))
-    //     return 1;
-    // lseek(fd, cur_off, SEEK_SET);
-    // return 0;
+    return libc_feof(stream);
 }
 
 int ferror(FILE *stream) {
     TRACE("intercepting ferror(stream=%p)\n", stream)
     
-    if STREAM_NOT_MANAGED(stream) {
-        return libc_ferror(stream);
-    }
-    
-    return ((stream->_flags & _IO_ERR_SEEN) != 0);
+    return libc_ferror(stream);
 }
 
 void clearerr(FILE *stream) {
+    TRACE("intercepting clearerr(stream=%p)\n", stream)
 
-    if STREAM_NOT_MANAGED(stream) {
-        return libc_clearerr(stream);
-    }
-
-    stream->_flags &= ~(_IO_ERR_SEEN|_IO_EOF_SEEN);
+    return libc_clearerr(stream);
 }
 
 ssize_t getxattr(const char *path, const char *name, void *value,  size_t size) {
