@@ -685,14 +685,19 @@ int fflush(FILE *stream) {
 
 int fputc(int c, FILE *stream) {
     TRACE("intercepting fputc(c=%d, stream=%p)\n", c, stream)
-    
+
     if STREAM_NOT_MANAGED(stream) {
         return libc_fputc(c, stream);
     }
     GoSlice cBuf = {(char*)&c, 1, 1};
     int n = Write(fileno(stream), cBuf); 
-	if (n <= 0)
-		return EOF;
+
+    if (n <= 0){
+        errno = GetErrno();
+        stream->_flags |= _IO_ERR_SEEN;
+        return EOF;
+    }
+
 	return c;
 }
 
@@ -736,10 +741,15 @@ int fgetc(FILE *stream) {
 	char c;
     GoSlice cBuf = {&c, 1, 1};
     int n = Read(fileno(stream), cBuf); 
-	if (n == 0)
+	if (n == 0){
+        stream->_flags |= _IO_EOF_SEEN;
 		return EOF;
-    if (n < 0)
+    }
+    if (n < 0){
+        errno = GetErrno();
+        stream->_flags |= _IO_ERR_SEEN;
         return n;
+    }
 	return c;
 }
 
@@ -877,7 +887,21 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
         return libc_fread(ptr, size, nmemb, stream);
     }
     GoSlice buffer = {ptr, size * nmemb, size * nmemb};
-    return Read(fileno(stream), buffer);
+    int ret = Read(fileno(stream), buffer);
+
+    if (ret != nmemb) {
+        errno = GetErrno();
+        if (ret == -1){
+            stream->_flags |= _IO_ERR_SEEN;
+        }
+        int fd = fileno(stream);
+        off_t cur_off = lseek(fd, 0, SEEK_CUR);
+        if (cur_off == lseek(fd, 0, SEEK_END)) 
+            stream->_flags |= _IO_EOF_SEEN;
+        lseek(fd, cur_off, SEEK_SET);
+    }
+
+    return ret;
 }
 
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
@@ -887,7 +911,12 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
         return libc_fwrite(ptr, size, nmemb, stream);
     }
     GoSlice buffer = {(void*)ptr, size * nmemb, size * nmemb};
-    return Write(fileno(stream), buffer);
+    int ret = Write(fileno(stream), buffer);
+    if (ret != nmemb) {
+        errno = GetErrno();
+        stream->_flags |= _IO_ERR_SEEN;
+    }
+    return ret;
 }
 
 int __fprintf_chk(FILE *stream, int flag, const char *fmt, ...) {
@@ -1174,24 +1203,19 @@ DIR* opendir(const char* path) {
 int feof(FILE *stream) {
     TRACE("intercepting feof(stream=%p)\n", stream)
     
-    if STREAM_NOT_MANAGED(stream) {
-        return libc_feof(stream);
-    }
-    int fd = fileno(stream);
-    off_t cur_off = lseek(fd, 0, SEEK_CUR);
-    if (cur_off == lseek(fd, 0, SEEK_END))
-        return 1;
-    lseek(fd, cur_off, SEEK_SET);
-    return 0;
+    return libc_feof(stream);
 }
 
 int ferror(FILE *stream) {
     TRACE("intercepting ferror(stream=%p)\n", stream)
     
-    if STREAM_NOT_MANAGED(stream) {
-        return libc_ferror(stream);
-    }
-    NOT_IMPLEMENTED("ferror")
+    return libc_ferror(stream);
+}
+
+void clearerr(FILE *stream) {
+    TRACE("intercepting clearerr(stream=%p)\n", stream)
+
+    return libc_clearerr(stream);
 }
 
 ssize_t getxattr(const char *path, const char *name, void *value,  size_t size) {

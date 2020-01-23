@@ -52,6 +52,7 @@ int main()
 	RUN_TEST(unlink);
 	RUN_TEST(write_read);
 	RUN_TEST(writev);
+	RUN_TEST(ferror);
 
 	printf("\ntotal errors: %d\n", err);
 	return !!err;

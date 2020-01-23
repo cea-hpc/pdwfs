@@ -223,7 +223,7 @@ func Fopen(filename string, mode string, fd int) int {
 	case "r":
 		flags = os.O_RDONLY
 	case "w":
-		flags = os.O_RDWR | os.O_CREATE
+		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	default:
 		panic(fmt.Sprintf("fopen mode '%s' unknown or not implemented yet", mode))
 	}
@@ -267,7 +267,15 @@ func Write(fd int, buf []byte) int {
 
 	n, err := (*file).Write(buf)
 
-	check(err) // no known conversion to errno, just panic if err != nil
+	if err != nil {
+		if err == redisfs.ErrReadOnly {
+			setErrno(C.EBADF)
+		} else {
+			check(err) // no known conversion to errno, just panic if err != nil
+		}
+		return -1
+	}
+
 	return n
 }
 
@@ -335,8 +343,13 @@ func Read(fd int, buf []byte) int {
 	check(err)
 
 	n, err := (*file).Read(buf)
-	if err != nil && err != io.EOF {
-		panic(err)
+	if err != nil && err != io.EOF{
+		if err == redisfs.ErrWriteOnly {
+			setErrno(C.EBADF)
+		} else {
+			check(err) // no known conversion to errno, just panic if err != nil
+		}
+		return -1
 	}
 	return n
 }
